@@ -1,0 +1,26 @@
+plugins { id 'com.android.application' }
+android {
+    namespace 'app.anibrowser.lite'
+    compileSdk { version = release(37) { minorApiLevel = 1 } }
+    defaultConfig {
+        applicationId 'app.anibrowser.lite'
+        minSdk 26
+        targetSdk 37
+        versionCode 1
+        versionName '0.1.0'
+    }
+    compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
+    buildTypes {
+        release {
+            minifyEnabled true
+            shrinkResources true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+    }
+    splits { abi { enable true; reset(); include 'armeabi-v7a', 'arm64-v8a', 'x86_64'; universalApk false } }
+}
+dependencies {
+    // Direct engine embedding: no Android Components, Compose, sync or account framework.
+    implementation 'org.mozilla.geckoview:geckoview-nightly-omni:157.0.20260906203723'
+    testImplementation 'junit:junit:4.13.2'
+}

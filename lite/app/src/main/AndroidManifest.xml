@@ -1,0 +1,22 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <application android:name=".LiteApplication" android:label="AniBrowser Lite"
+        android:icon="@drawable/ic_launcher" android:theme="@android:style/Theme.Material.Light.NoActionBar"
+        android:allowBackup="false" android:dataExtractionRules="@xml/data_extraction_rules" android:usesCleartextTraffic="true" android:supportsRtl="true">
+        <activity android:name=".BrowserActivity" android:exported="true" android:launchMode="singleTask"
+            android:configChanges="keyboard|keyboardHidden|orientation|screenSize|smallestScreenSize|screenLayout|uiMode"
+            android:windowSoftInputMode="adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="http" /><data android:scheme="https" />
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>

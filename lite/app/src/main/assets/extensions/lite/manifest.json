@@ -1,0 +1,12 @@
+{
+  "manifest_version": 2,
+  "name": "AniBrowser Lite Playback",
+  "version": "0.1.3",
+  "browser_specific_settings": {"gecko": {"id": "playback@anibrowser.lite"}},
+  "permissions": ["nativeMessaging", "geckoViewAddons", "tabs", "webRequest", "webRequestBlocking", "<all_urls>"],
+  "background": {"scripts": ["background.js"]},
+  "content_scripts": [{
+    "matches": ["http://*/*", "https://*/*"],
+    "js": ["playback.js"], "all_frames": true, "match_about_blank": true, "run_at": "document_start"
+  }]
+}
