@@ -26,7 +26,7 @@ Protected streaming, subtitles, sign-in and player behavior depend on each websi
 
 ## Build and install
 
-- **Android Lite:** [Features and build instructions](lite/README.md). [Download the Lite preview](https://github.com/akasumitlamba/AniBrowser/releases/tag/lite-v0.1.0-preview). Installs alongside the full Android app.
+- **Android Lite:** [Features and build instructions](lite/README.md). [Download the Lite preview](https://github.com/akasumitlamba/AniBrowser/releases/tag/lite-v0.2.0-preview). Installs alongside the full Android app.
 
 - **Android:** [Build instructions](android/README.md). Run `./build-android.ps1` on Windows or use the Gradle wrapper inside `android/`.
 - **iPhone and iPad:** [Development](ios/README.md) and [free installation from Windows](ios/INSTALL-WINDOWS.md). Run **Actions → Build free iOS IPA**. Free Apple Account signing requires refreshing every seven days.

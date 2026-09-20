@@ -2,6 +2,12 @@ package app.anibrowser.lite;
 import org.junit.Test;
 import static org.junit.Assert.*;
 public class SitePolicyTest {
+    @Test public void selectedSearchEngineIsUsedWithoutChangingUrls() {
+        assertEquals("https://duckduckgo.com/?q=video+speed",SitePolicy.input("video speed",1));
+        assertEquals("https://www.bing.com/search?q=cats",SitePolicy.input("cats",2));
+        assertEquals("https://example.com",SitePolicy.input("example.com",2));
+        assertEquals("https://www.google.com/search?q=cats",SitePolicy.input("cats",0));
+    }
     @Test public void promptEveryCrossSiteAttempt() {
         for(int i=0;i<3;i++) assertTrue(SitePolicy.needsPrompt("https://video.example/a","https://other.example/b",false,false));
     }

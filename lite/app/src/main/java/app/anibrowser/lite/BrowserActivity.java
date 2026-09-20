@@ -40,6 +40,12 @@ public final class BrowserActivity extends Activity {
     private float downX, downY;
     private boolean pageTouch;
     private Addons addons;
+    private ScrollView homeView;
+    private FrameLayout pageArea;
+    private boolean homeVisible = true;
+    private Button tabsButton;
+    private final List<GeckoSession> tabs = new ArrayList<>();
+    private final Map<GeckoSession,String> titles = new HashMap<>();
     private final Runnable hide = () -> { if (immersive() && dialogs.isEmpty()) showControls(false); };
 
     @Override public void onCreate(Bundle saved) {
@@ -49,6 +55,7 @@ public final class BrowserActivity extends Activity {
         shortcut = getIntent().getBooleanExtra("fullscreen", saved != null && saved.getBoolean("fullscreen"));
         buildUi();
         session = createSession();
+        tabs.add(session);
         session.open(runtime);
         browser.setSession(session);
         session.setActive(true);
@@ -65,7 +72,7 @@ public final class BrowserActivity extends Activity {
     }
     private void installPlayback(Bundle saved) {
         runtime.getWebExtensionController().ensureBuiltIn("resource://android/assets/extensions/lite/", BUILTIN).accept(extension -> {
-            extension.setMessageDelegate(new WebExtension.MessageDelegate() {
+            WebExtension.MessageDelegate delegate = new WebExtension.MessageDelegate() {
                 @Override public GeckoResult<Object> onMessage(String app, Object value, WebExtension.MessageSender sender) {
                     if (!(value instanceof JSONObject)) return GeckoResult.fromValue(null);
                     JSONObject message = (JSONObject)value;
@@ -92,6 +99,7 @@ public final class BrowserActivity extends Activity {
                 }
                 @Override public void onConnect(WebExtension.Port connected) {
                     port = connected;
+                    ((LiteApplication)getApplication()).playbackPort = connected;
                     WebExtension.MessageDelegate messages = this;
                     connected.setDelegate(new WebExtension.PortDelegate() {
                         @Override public void onPortMessage(Object value, WebExtension.Port source) {
@@ -106,13 +114,21 @@ public final class BrowserActivity extends Activity {
                                 catch (RuntimeException ignored) { }
                             });
                         }
-                        @Override public void onDisconnect(WebExtension.Port disconnected) { if (port == disconnected) port = null; }
+                        @Override public void onDisconnect(WebExtension.Port disconnected) {
+                            if (port == disconnected) port = null;
+                            LiteApplication app=(LiteApplication)getApplication();
+                            if(app.playbackPort==disconnected) app.playbackPort=null;
+                        }
                     });
                 }
-            }, "anilite");
+            };
+            extension.setMessageDelegate(delegate,"anilite");
+            WebExtension.Port existing=((LiteApplication)getApplication()).playbackPort;
+            if(existing!=null) delegate.onConnect(existing);
             started = true;
             addons.bindInstalled();
-            if (saved != null && saved.getString("url") != null && getIntent().getData() == null)
+            if (saved != null && saved.getBoolean("home")) showHome();
+            else if (saved != null && saved.getString("url") != null && getIntent().getData() == null)
                 open(saved.getString("url"));
             else acceptIntent(getIntent());
         }, error -> {
@@ -173,19 +189,19 @@ public final class BrowserActivity extends Activity {
             @Override public void onLocationChange(GeckoSession s, String url, List<GeckoSession.PermissionDelegate.ContentPermission> permissions, Boolean gesture) {
                 if (url == null) return;
                 urls.put(s, url);
-                if (s == session) { if (!address.hasFocus()) address.setText("about:blank".equals(url) ? "" : url); refreshSpeed(); }
+                if (s == session) { if (SitePolicy.web(url)) setHomeVisible(false); if (!address.hasFocus()) address.setText("about:blank".equals(url) ? "" : url); refreshSpeed(); }
             }
             @Override public void onCanGoBack(GeckoSession s, boolean value) { back.put(s, value); }
             @Override public GeckoResult<String> onLoadError(GeckoSession s, String url, WebRequestError error) {
-                if (s == session) { progress.setVisibility(View.GONE); toast("Could not load this page. Check the address or connection."); showControls(true); }
+                if (s == session) { progress.setVisibility(View.GONE); toast("Could not load this page. Check the address or connection."); showControls(false); }
                 return null;
             }
         });
         result.setContentDelegate(new GeckoSession.ContentDelegate() {
-            @Override public void onTitleChange(GeckoSession s, String value) { if (s == session) title = value == null ? "Website" : value; }
+            @Override public void onTitleChange(GeckoSession s, String value) { titles.put(s,value == null ? "Website" : value); if (s == session) title = value == null ? "Website" : value; }
             @Override public void onFullScreen(GeckoSession s, boolean full) {
                 if (s != session) return;
-                fullVideo = full; systemBars(); showControls(!immersive());
+                fullVideo = full; systemBars(); showControls(false);
             }
             @Override public void onCloseRequest(GeckoSession s) { if (s == session && parent != null) closePopup(); }
             @Override public void onCrash(GeckoSession s) { recover(s); }
@@ -194,7 +210,10 @@ public final class BrowserActivity extends Activity {
         result.setProgressDelegate(new GeckoSession.ProgressDelegate() {
             @Override public void onPageStart(GeckoSession s, String uri) { if (s == session) { progress.setProgress(5); progress.setVisibility(View.VISIBLE); } }
             @Override public void onProgressChange(GeckoSession s, int value) { if (s == session) progress.setProgress(value); }
-            @Override public void onPageStop(GeckoSession s, boolean success) { if (s == session) progress.setVisibility(View.GONE); }
+            @Override public void onPageStop(GeckoSession s, boolean success) {
+                if (s == session) progress.setVisibility(View.GONE);
+                if (success && SitePolicy.web(urls.get(s))) remember("history", urls.get(s), titles.getOrDefault(s,SitePolicy.host(urls.get(s))),100);
+            }
         });
         result.setPermissionDelegate(new GeckoSession.PermissionDelegate() {
             @Override public GeckoResult<Integer> onContentPermissionRequest(GeckoSession s, ContentPermission permission) {
@@ -226,8 +245,11 @@ public final class BrowserActivity extends Activity {
     private void recover(GeckoSession crashed) {
         if (crashed != session || isDestroyed()) return;
         String url = currentUrl();
-        browser.releaseSession(); crashed.close(); urls.remove(crashed); back.remove(crashed);
+        int tabIndex=tabs.indexOf(crashed);
+        browser.releaseSession(); crashed.close(); urls.remove(crashed); back.remove(crashed); mediaSessions.remove(crashed); titles.remove(crashed);
         session = createSession(); session.open(runtime); browser.setSession(session); session.setActive(foreground);
+        if(tabIndex>=0) tabs.set(tabIndex,session);
+        runtime.getWebExtensionController().setTabActive(session,true); addons.bindInstalled();
         toast("Page stopped. Tap Reload to try again.");
         urls.put(session, url); showControls(true);
     }
@@ -236,16 +258,23 @@ public final class BrowserActivity extends Activity {
         LinearLayout column = new LinearLayout(this); column.setOrientation(LinearLayout.VERTICAL); column.setBackgroundColor(Color.WHITE);
         root.addView(column, new FrameLayout.LayoutParams(-1,-1));
         addressRow = new LinearLayout(this); addressRow.setGravity(Gravity.CENTER_VERTICAL);
+        addressRow.setPadding(dp(4),0,dp(4),0);
+        addButton(addressRow,"‹",this::goBack).setContentDescription("Back");
         address = new EditText(this); address.setSingleLine(true); address.setTextSize(16); address.setHint("Search or enter address");
         address.setInputType(android.text.InputType.TYPE_CLASS_TEXT | android.text.InputType.TYPE_TEXT_VARIATION_URI);
         address.setImeOptions(android.view.inputmethod.EditorInfo.IME_ACTION_GO);
         addressRow.addView(address, new LinearLayout.LayoutParams(0, dp(52), 1));
-        addButton(addressRow, "Go", () -> open(SitePolicy.input(address.getText().toString())));
-        address.setOnEditorActionListener((v, id, event) -> { open(SitePolicy.input(address.getText().toString())); return true; });
+        address.setSelectAllOnFocus(true);
+        addButton(addressRow, "↻", () -> { if (!homeVisible) session.reload(); }).setContentDescription("Reload");
+        tabsButton = addButton(addressRow, "1", this::showTabs); tabsButton.setContentDescription("Tabs");
+        addButton(addressRow, "⋮", this::menu).setContentDescription("Browser menu");
+        address.setOnEditorActionListener((v, id, event) -> { navigateInput(address.getText().toString()); return true; });
         column.addView(addressRow, new LinearLayout.LayoutParams(-1,-2));
         progress = new ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal); progress.setMax(100); progress.setVisibility(View.GONE);
         column.addView(progress, new LinearLayout.LayoutParams(-1,dp(2)));
-        browser = new GeckoView(this); column.addView(browser, new LinearLayout.LayoutParams(-1,0,1));
+        pageArea = new FrameLayout(this);
+        browser = new GeckoView(this); pageArea.addView(browser,new FrameLayout.LayoutParams(-1,-1));
+        homeView = new ScrollView(this); homeView.setFillViewport(true); pageArea.addView(homeView,new FrameLayout.LayoutParams(-1,-1));
         controls = new LinearLayout(this);
         LinearLayout row = controls; row.setGravity(Gravity.CENTER_VERTICAL);
         addButton(row, "−10s", () -> command("back"));
@@ -253,13 +282,14 @@ public final class BrowserActivity extends Activity {
         addButton(row, "+10s", () -> command("forward"));
         speedButton = addButton(row, "1×", this::chooseSpeed);
         addButton(row, "Site", this::siteSettings);
-        addButton(row, "Menu", this::menu);
+        addButton(row, "×", () -> showControls(false)).setContentDescription("Hide playback controls");
         for (int i=0; i<row.getChildCount(); i++) row.getChildAt(i).setLayoutParams(new LinearLayout.LayoutParams(0,dp(48),1));
         column.addView(controls, new LinearLayout.LayoutParams(-1,dp(52)));
+        column.addView(pageArea,new LinearLayout.LayoutParams(-1,0,1));
         revealButton = new Button(this); revealButton.setText("1× ⋮"); revealButton.setAllCaps(false); revealButton.setContentDescription("Show browser and playback controls"); revealButton.setTextSize(14);
         FrameLayout.LayoutParams reveal = new FrameLayout.LayoutParams(dp(76),dp(48),Gravity.TOP | Gravity.END);
         reveal.topMargin = dp(6); reveal.rightMargin = dp(6); root.addView(revealButton, reveal);
-        revealButton.setOnClickListener(v -> showControls(true));
+        revealButton.setOnClickListener(v -> menu());
         setContentView(root);
         root.setOnApplyWindowInsetsListener((view, insets) -> {
             if (Build.VERSION.SDK_INT >= 30) {
@@ -269,7 +299,7 @@ public final class BrowserActivity extends Activity {
             } else root.setPadding(insets.getSystemWindowInsetLeft(), immersive() ? 0 : insets.getSystemWindowInsetTop(), insets.getSystemWindowInsetRight(), immersive() ? 0 : insets.getSystemWindowInsetBottom());
             return insets;
         });
-        showControls(!shortcut);
+        renderHome(); setHomeVisible(!shortcut); showControls(false);
     }
     Button addButton(LinearLayout row, String label, Runnable action) {
         Button button = new Button(this); button.setText(label); button.setAllCaps(false); button.setTextSize(14);
@@ -299,7 +329,7 @@ public final class BrowserActivity extends Activity {
     }
     @Override public void onWindowFocusChanged(boolean focused) { super.onWindowFocusChanged(focused); if (focused) systemBars(); }
     private void showControls(boolean show) {
-        if (!immersive()) show = true;
+        if (homeVisible) show = false;
         controls.setVisibility(show ? View.VISIBLE : View.GONE);
         revealButton.setVisibility(immersive() && !show ? View.VISIBLE : View.GONE);
         handler.removeCallbacks(hide);
@@ -308,7 +338,8 @@ public final class BrowserActivity extends Activity {
     @Override public boolean dispatchTouchEvent(android.view.MotionEvent event) {
         if (event.getActionMasked() == MotionEvent.ACTION_DOWN) {
             downX = event.getX(); downY = event.getY();
-            pageTouch = downY >= browser.getTop() && downY < browser.getBottom();
+            int[] position=new int[2]; browser.getLocationOnScreen(position);
+            pageTouch = !homeVisible && event.getRawY() >= position[1] && event.getRawY() < position[1]+browser.getHeight();
         } else if (event.getActionMasked() == MotionEvent.ACTION_MOVE && event.getPointerCount() == 1 && pageTouch
             && Math.abs(event.getY() - downY) > dp(28) && Math.abs(event.getY() - downY) > Math.abs(event.getX() - downX)) {
             if (immersive()) showControls(true); pageTouch = false;
@@ -334,6 +365,7 @@ public final class BrowserActivity extends Activity {
     private void command(String value) { publish(json("type", "command", "command", value)); }
     void open(String url) {
         if (!started || !SitePolicy.web(url)) return;
+        setHomeVisible(false); showControls(false);
         applyMode(session, url);
         address.clearFocus(); browser.requestFocus();
         ((InputMethodManager)getSystemService(INPUT_METHOD_SERVICE)).hideSoftInputFromWindow(address.getWindowToken(),0);
@@ -342,13 +374,13 @@ public final class BrowserActivity extends Activity {
     private void acceptIntent(Intent intent) {
         String url = intent.getDataString();
         if (SitePolicy.web(url)) open(url);
-        else if ("about:blank".equals(currentUrl())) { address.requestFocus(); }
+        else if ("about:blank".equals(currentUrl())) { showHome(); }
     }
     @Override protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent); setIntent(intent);
         shortcut = intent.getBooleanExtra("fullscreen", false); fullVideo = false;
         if (parent != null) closePopup();
-        systemBars(); showControls(!shortcut);
+        systemBars(); showControls(false);
         if (started) acceptIntent(intent);
     }
     void applyMode(GeckoSession target, String url) {
@@ -371,6 +403,7 @@ public final class BrowserActivity extends Activity {
         }).setNegativeButton("Cancel", null).create());
     }
     private void siteSettings() {
+        if (homeVisible) { toast("Open a website first"); return; }
         if (!SitePolicy.web(currentUrl())) { toast("Open a website first"); return; }
         String url = currentUrl();
         showDialog(new AlertDialog.Builder(this).setTitle(SitePolicy.key(url)).setItems(new String[]{"Playback speed (remembered)", "Viewing mode (remembered)", "Redirects: ask every time; search engines exempt"}, (d, item) -> {
@@ -381,20 +414,119 @@ public final class BrowserActivity extends Activity {
         }).setPositiveButton("Done", null).create());
     }
     private void menu() {
-        showDialog(new AlertDialog.Builder(this).setTitle("AniBrowser Lite").setItems(new String[]{"Open address", "Reload", "Forward", "Add to home screen", "Site settings", "Extensions", immersive() ? "Exit fullscreen" : "Fullscreen"}, (dialog,index) -> {
+        String[] items = {"Home", "New tab", "Forward", "Bookmarks", "Bookmark this page", "History",
+            "Search engine: " + engineName(), "Playback controls", "Site settings", "Add to home screen", "Extensions", "Share page",
+            immersive() ? "Exit fullscreen" : "Fullscreen"};
+        showDialog(new AlertDialog.Builder(this).setTitle("AniBrowser Lite").setItems(items,(dialog,index) -> {
             switch(index) {
-                case 0: EditText input = new EditText(this); input.setSingleLine(); input.setHint("Search or enter address"); input.setText(SitePolicy.web(currentUrl()) ? currentUrl() : "");
-                    showDialog(new AlertDialog.Builder(this).setTitle("Open address").setView(input).setPositiveButton("Go", (d,w) -> open(SitePolicy.input(input.getText().toString()))).setNegativeButton("Cancel",null).create()); break;
-                case 1: if (SitePolicy.web(currentUrl())) { applyMode(session,currentUrl()); session.reload(); } break;
-                case 2: session.goForward(); break;
-                case 3: pinShortcut(); break;
-                case 4: siteSettings(); break;
-                case 5: addons.show(); break;
-                case 6: if (fullVideo) session.exitFullScreen(); shortcut = !immersive(); fullVideo = false; systemBars(); showControls(!shortcut); break;
+                case 0: showHome(); break;
+                case 1: newTab(); break;
+                case 2: if (SitePolicy.web(currentUrl())) { setHomeVisible(false); session.goForward(); } break;
+                case 3: library("bookmarks"); break;
+                case 4: if (!homeVisible && SitePolicy.web(currentUrl())) { remember("bookmarks",currentUrl(),title,50); toast("Bookmark saved"); } else toast("Open a website first"); break;
+                case 5: library("history"); break;
+                case 6: chooseEngine(); break;
+                case 7: if (homeVisible) toast("Open a website first"); else showControls(true); break;
+                case 8: siteSettings(); break;
+                case 9: pinShortcut(); break;
+                case 10: addons.show(); break;
+                case 11: if (!homeVisible && SitePolicy.web(currentUrl())) startActivity(Intent.createChooser(new Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT,currentUrl()),"Share page")); break;
+                case 12: if (homeVisible) { toast("Open a website first"); break; } if (fullVideo) session.exitFullScreen(); shortcut = !immersive(); fullVideo = false; systemBars(); showControls(false); break;
             }
         }).setNegativeButton("Close",null).create());
     }
+    private String engineName() { return new String[]{"Google","DuckDuckGo","Bing"}[Math.max(0,Math.min(2,prefs.getInt("searchEngine",0)))]; }
+    private void navigateInput(String text) { if (!text.trim().isEmpty()) open(SitePolicy.input(text,prefs.getInt("searchEngine",0))); }
+    private void chooseEngine() {
+        showDialog(new AlertDialog.Builder(this).setTitle("Default search engine").setSingleChoiceItems(new String[]{"Google","DuckDuckGo","Bing"},prefs.getInt("searchEngine",0),(d,index) -> {
+            prefs.edit().putInt("searchEngine",index).apply(); renderHome(); d.dismiss();
+        }).setNegativeButton("Cancel",null).create());
+    }
+    private void setHomeVisible(boolean visible) {
+        homeVisible = visible; homeView.setVisibility(visible ? View.VISIBLE : View.GONE);
+        browser.setVisibility(visible ? View.INVISIBLE : View.VISIBLE);
+        if (visible) { address.setText(""); controls.setVisibility(View.GONE); revealButton.setVisibility(View.GONE); }
+    }
+    private void showHome() {
+        if (session != null) { pause(session); command("pause"); session.stop(); }
+        if (fullVideo) session.exitFullScreen();
+        shortcut = false; fullVideo = false; systemBars(); renderHome(); setHomeVisible(true); showControls(false);
+        address.clearFocus(); homeView.requestFocus();
+        ((InputMethodManager)getSystemService(INPUT_METHOD_SERVICE)).hideSoftInputFromWindow(address.getWindowToken(),0);
+    }
+    private TextView homeText(String text, int size) {
+        TextView view=new TextView(this); view.setText(text); view.setTextSize(size); view.setTextColor(Color.rgb(35,42,52)); return view;
+    }
+    private void renderHome() {
+        homeView.removeAllViews(); homeView.setBackgroundColor(Color.rgb(247,248,250));
+        LinearLayout outer=new LinearLayout(this); outer.setOrientation(LinearLayout.VERTICAL); outer.setGravity(Gravity.CENTER_HORIZONTAL); outer.setPadding(dp(24),dp(48),dp(24),dp(24));
+        homeView.addView(outer,new ScrollView.LayoutParams(-1,-1));
+        TextView heading=homeText("AniBrowser Lite",28); heading.setTypeface(null,android.graphics.Typeface.BOLD); heading.setGravity(Gravity.CENTER); outer.addView(heading);
+        TextView subtitle=homeText("Search the web",16); subtitle.setGravity(Gravity.CENTER); subtitle.setPadding(0,dp(8),0,dp(28)); outer.addView(subtitle);
+        LinearLayout search=new LinearLayout(this); search.setGravity(Gravity.CENTER_VERTICAL);
+        EditText input=new EditText(this); input.setSingleLine(true); input.setTextSize(16); input.setHint("Search or enter address"); input.setImeOptions(android.view.inputmethod.EditorInfo.IME_ACTION_GO);
+        input.setInputType(android.text.InputType.TYPE_CLASS_TEXT | android.text.InputType.TYPE_TEXT_VARIATION_URI);
+        search.addView(input,new LinearLayout.LayoutParams(0,dp(56),1)); addButton(search,"Go",()->navigateInput(input.getText().toString()));
+        input.setOnEditorActionListener((v,action,event)->{navigateInput(input.getText().toString());return true;});
+        outer.addView(search,new LinearLayout.LayoutParams(-1,-2));
+        Button engine=new Button(this); engine.setText("Search with " + engineName() + " ▾"); engine.setAllCaps(false); engine.setOnClickListener(v->chooseEngine()); outer.addView(engine);
+        LinearLayout links=new LinearLayout(this); links.setGravity(Gravity.CENTER);
+        addButton(links,"Bookmarks",()->library("bookmarks")); addButton(links,"History",()->library("history")); outer.addView(links);
+        TextView label=homeText("Your bookmarks",18); label.setTypeface(null,android.graphics.Typeface.BOLD); label.setPadding(0,dp(32),0,dp(12)); outer.addView(label,new LinearLayout.LayoutParams(-1,-2));
+        JSONArray entries=entries("bookmarks");
+        if(entries.length()==0) { TextView empty=homeText("Save a page from the browser menu to find it here.",15); outer.addView(empty,new LinearLayout.LayoutParams(-1,-2)); }
+        for(int i=0;i<Math.min(entries.length(),8);i++) {
+            JSONObject entry=entries.optJSONObject(i); if(entry==null) continue;
+            Button link=new Button(this); link.setAllCaps(false); link.setGravity(Gravity.START|Gravity.CENTER_VERTICAL); link.setMaxLines(2);
+            link.setText(entry.optString("title") + "\n" + SitePolicy.host(entry.optString("url")));
+            link.setOnClickListener(v->open(entry.optString("url"))); outer.addView(link,new LinearLayout.LayoutParams(-1,dp(64)));
+        }
+        outer.setFocusableInTouchMode(true); outer.requestFocus();
+    }
+    private JSONArray entries(String kind) { try { return new JSONArray(prefs.getString(kind,"[]")); } catch(JSONException e) { return new JSONArray(); } }
+    private void remember(String kind,String url,String name,int limit) {
+        JSONArray previous=entries(kind),next=new JSONArray(); next.put(json("url",url,"title",name == null || name.isEmpty() ? SitePolicy.host(url) : name));
+        for(int i=0;i<previous.length() && next.length()<limit;i++) { JSONObject entry=previous.optJSONObject(i); if(entry!=null && !url.equals(entry.optString("url"))) next.put(entry); }
+        prefs.edit().putString(kind,next.toString()).apply();
+    }
+    private void library(String kind) {
+        JSONArray entries=entries(kind); String heading="bookmarks".equals(kind)?"Bookmarks":"History";
+        String[] labels=new String[entries.length()]; for(int i=0;i<labels.length;i++) { JSONObject e=entries.optJSONObject(i); labels[i]=e.optString("title")+"\n"+e.optString("url"); }
+        AlertDialog.Builder dialog=new AlertDialog.Builder(this).setTitle(heading).setNegativeButton("Close",null);
+        if(labels.length==0) dialog.setMessage("bookmarks".equals(kind)?"No bookmarks yet. Use Bookmark this page in the browser menu.":"Pages you visit will appear here.");
+        else dialog.setItems(labels,(d,index)->open(entries.optJSONObject(index).optString("url"))).setNeutralButton("Clear",(d,w)->{
+            showDialog(new AlertDialog.Builder(this).setTitle("Clear " + heading.toLowerCase(Locale.ROOT) + "?").setPositiveButton("Clear",(confirm,which)->{prefs.edit().remove(kind).apply();renderHome();}).setNegativeButton("Cancel",null).create());
+        });
+        showDialog(dialog.create());
+    }
+    private void newTab() {
+        if (tabs.size() >= 4) { toast("Close a tab before opening another (4 tabs maximum in Lite)"); showTabs(); return; }
+        if(parent!=null) closePopup();
+        GeckoSession next=createSession(); next.open(runtime); tabs.add(next); switchTab(next); showHome();
+    }
+    private void switchTab(GeckoSession next) {
+        if(parent!=null) closePopup();
+        if(session!=next) { pause(session); session.setActive(false); runtime.getWebExtensionController().setTabActive(session,false); browser.releaseSession(); session=next; browser.setSession(next); }
+        session.setActive(foreground); runtime.getWebExtensionController().setTabActive(session,true);
+        title=titles.getOrDefault(session,"Website"); fullVideo=false; shortcut=false;
+        address.setText(SitePolicy.web(currentUrl())?currentUrl():""); refreshSpeed(); systemBars(); showControls(false);
+        if(!SitePolicy.web(currentUrl())) showHome(); else setHomeVisible(false);
+        tabsButton.setText(String.valueOf(tabs.size())); addons.bindInstalled();
+    }
+    private void showTabs() {
+        String[] labels=new String[tabs.size()]; for(int i=0;i<tabs.size();i++) { GeckoSession tab=tabs.get(i); labels[i]=(tab==session?"● ":"")+(SitePolicy.web(urls.get(tab))?titles.getOrDefault(tab,SitePolicy.host(urls.get(tab))):"New tab"); }
+        showDialog(new AlertDialog.Builder(this).setTitle("Tabs ("+tabs.size()+"/4)").setItems(labels,(d,index)->switchTab(tabs.get(index)))
+            .setPositiveButton("New tab",(d,w)->newTab()).setNeutralButton("Close current",(d,w)->closeTab()).setNegativeButton("Done",null).create());
+    }
+    private void closeTab() {
+        if(parent!=null) { closePopup(); return; }
+        GeckoSession old=session; tabs.remove(old); browser.releaseSession(); old.close(); urls.remove(old); titles.remove(old); back.remove(old); mediaSessions.remove(old);
+        if(tabs.isEmpty()) { session=createSession();session.open(runtime);tabs.add(session); }
+        else session=tabs.get(tabs.size()-1);
+        browser.setSession(session); switchTab(session);
+    }
     private void pinShortcut() {
+        if (homeVisible) { toast("Open a website first"); return; }
         String url = currentUrl();
         if (!SitePolicy.web(url)) { toast("Open a website first"); return; }
         ShortcutManager manager = getSystemService(ShortcutManager.class);
@@ -446,8 +578,9 @@ public final class BrowserActivity extends Activity {
     }
     private void goBack() {
         if (fullVideo) { session.exitFullScreen(); return; }
+        if (homeVisible) { if(SitePolicy.web(currentUrl())) { setHomeVisible(false); address.setText(currentUrl()); } else finish(); return; }
         if (Boolean.TRUE.equals(back.get(session))) session.goBack();
-        else if (parent != null) closePopup(); else finish();
+        else if (parent != null) closePopup(); else showHome();
     }
     // API 33+ uses the platform OnBackInvokedDispatcher registered in onCreate.
     // This override is exclusively the pre-33 hardware/gesture fallback.
@@ -461,11 +594,11 @@ public final class BrowserActivity extends Activity {
         for (AlertDialog dialog : new ArrayList<>(dialogs)) dialog.dismiss();
         super.onPause();
     }
-    @Override protected void onSaveInstanceState(Bundle state) { super.onSaveInstanceState(state); state.putString("url", currentUrl()); state.putBoolean("fullscreen",shortcut); }
+    @Override protected void onSaveInstanceState(Bundle state) { super.onSaveInstanceState(state); state.putString("url", currentUrl()); state.putBoolean("fullscreen",shortcut); state.putBoolean("home",homeVisible); }
     @Override protected void onDestroy() {
         handler.removeCallbacksAndMessages(null);
         for (AlertDialog dialog : new ArrayList<>(dialogs)) dialog.dismiss();
-        browser.releaseSession(); if (session != null) session.close(); if (parent != null) parent.close();
+        browser.releaseSession(); for(GeckoSession tab:tabs) tab.close(); if(session!=null && !tabs.contains(session)) session.close();
         if (addons != null) addons.close();
         port = null; urls.clear(); back.clear(); mediaSessions.clear(); super.onDestroy();
     }

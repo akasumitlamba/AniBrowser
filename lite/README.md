@@ -4,18 +4,21 @@ A separate Android browser with a small native interface, built directly on Mozi
 
 ## Included
 
+- Native browser home screen with search and saved bookmarks. Google is the default; DuckDuckGo and Bing are selectable and remembered.
+- Top address/navigation bar, a tab switcher (up to four tabs), bookmarks, local history and sharing. Inactive tabs suspend media.
+
 - Playback speed saved automatically for each website, including its embedded players. Mobile/www aliases share the setting. Speed is restored on media loading, playing and rate-change events, without a polling loop or document-wide mutation observer.
 - Cross-site navigation and pop-up confirmation for each attempt. Common search engines are exempt. An Allow decision applies only to that request. Embedded video frames and media requests are not treated as page redirects.
 - Three saved viewing modes: Mobile; Desktop identity with mobile layout; Desktop. These select user-agent identity and viewport independently. Websites still decide which layout/content to return.
-- Home-screen shortcuts open with the browser address bar, status bar and navigation bar hidden. Android edge gestures can temporarily reveal system bars. A vertical swipe or the small controls button reveals the playback/site toolbar. Its space is reserved below the page, keeping bottom player controls accessible.
+- Home-screen shortcuts open with the browser address bar, status bar and navigation bar hidden. Android edge gestures can temporarily reveal system bars. A vertical swipe or the small controls button reveals the playback/site toolbar. Playback controls appear temporarily above the page, keeping the site's bottom player controls accessible.
 - Play/pause, seek backward/forward 10 seconds, speed and site settings. Website player containers and their controls are left intact. Lite's native speed/controls button stays reachable above fullscreen web content. A tap or vertical swipe reveals the full toolbar. Bare-video fullscreen enables native video controls and restores the original setting on exit.
 - Optional Mozilla-signed WebExtensions: install via an HTTPS XPI download link, review permissions, open extension actions/options, enable, disable, update on demand and remove.
 
-There is no home dashboard, wallpaper, ad blocker, sync/account framework, background playback service, picture-in-picture, tab thumbnail cache, add-on catalog fetcher or periodic app maintenance worker. The main browser uses one page session. One temporary popup is permitted when needed for login flows and is closed when returning to the parent. Extension UI uses a temporary session only while open.
+There is no wallpaper, ad blocker, sync/account framework, background playback service, picture-in-picture, tab thumbnail cache, add-on catalog fetcher or periodic app maintenance worker. The browser allows up to four page sessions, with only the selected page active. One temporary popup is permitted when needed for login flows and is closed when returning to the parent. Extension UI uses a temporary session only while open.
 
 ## Use
 
-Launch the app and enter a website or search. Use **Site** for the three viewing modes and playback speed; **Menu** provides Reload, Forward, Add to home screen and Extensions. Speed changes are saved immediately.
+Launch the app and enter a website or search. Use the top browser menu for site settings, playback controls, bookmarks, history, search engine and extensions. The tab counter switches tabs. There is no permanent bottom playback toolbar. Speed changes are saved immediately.
 
 For a fullscreen shortcut, open the site and select **Menu → Add to home screen**, then accept the Android launcher prompt. Create shortcuts from Lite itself; existing full-app shortcuts still belong to the full app.
 
@@ -36,7 +39,7 @@ gradle :app:testDebugUnitTest :app:lintDebug :app:assembleDebug
 node --test app/src/test/playback.test.cjs
 ```
 
-The engine is pinned to `org.mozilla.geckoview:geckoview-nightly-omni:157.0.20260906203723`. It should receive regular security updates before long-term distribution. App sources are MPL-2.0; see LICENSE and THIRD-PARTY-NOTICES.md.
+The engine is pinned to `org.mozilla.geckoview:geckoview-nightly-omni:157.0.20260906203723`, matching the engine available in this workspace. It should receive regular security updates before long-term distribution. App sources are MPL-2.0; see LICENSE and THIRD-PARTY-NOTICES.md.
 
 ## Scope and validation
 
@@ -45,3 +48,5 @@ This is an Android application. Desktop identity is a website setting, not a Win
 The smaller app framework does not remove the browser engine's or website's own memory/CPU requirements. Smooth video on a particular 3 GB device, codec/DRM compatibility, subscription playback and site-specific extension compatibility require physical-device testing. Some players reject playback-rate changes; writes are bounded to avoid a CPU loop. Closed shadow DOM/native/DRM players can restrict injected controls. A native controls button remains available in fullscreen.
 
 Camera, microphone, location, push notifications, browser sync, a download manager and password storage are outside this minimal version. Standard website forms, HTML video controls and sign-in cookies remain available. Extension APIs requiring a full tabs/downloads ecosystem may not be supported.
+
+`qa/server.cjs` is a local acceptance fixture, excluded from APKs. It uses the parent checkout's sample video and writes test results to `output/lite/qa/`.

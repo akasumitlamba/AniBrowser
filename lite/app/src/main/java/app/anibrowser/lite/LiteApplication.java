@@ -7,6 +7,7 @@ import org.mozilla.geckoview.GeckoRuntimeSettings;
 
 public final class LiteApplication extends Application {
     private GeckoRuntime runtime;
+    org.mozilla.geckoview.WebExtension.Port playbackPort;
     public GeckoRuntime runtime() {
         if (runtime == null) {
             runtime = GeckoRuntime.create(this, new GeckoRuntimeSettings.Builder()

@@ -33,13 +33,17 @@ public final class SitePolicy {
         return popup || (web(source) && !key(source).equals(key(destination)));
     }
     public static String input(String text) {
+        return input(text, 0);
+    }
+    public static String input(String text, int engine) {
         String value = text.trim();
         if (web(value)) return value;
         if (!value.contains(" ") && !value.contains("://") && (value.contains(".") || value.startsWith("localhost"))) {
             String candidate = "https://" + value;
             if (web(candidate)) return candidate;
         }
-        try { return "https://www.google.com/search?q=" + java.net.URLEncoder.encode(value, "UTF-8"); }
+        String[] providers = {"https://www.google.com/search?q=", "https://duckduckgo.com/?q=", "https://www.bing.com/search?q="};
+        try { return providers[Math.max(0, Math.min(2,engine))] + java.net.URLEncoder.encode(value, "UTF-8"); }
         catch (java.io.UnsupportedEncodingException impossible) { throw new AssertionError(impossible); }
     }
 }
