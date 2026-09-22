@@ -5,7 +5,8 @@ A separate Android browser with a small native interface, built directly on Mozi
 ## Included
 
 - Native browser home screen with search and saved bookmarks. Google is the default; DuckDuckGo and Bing are selectable and remembered.
-- Top address/navigation bar, a tab switcher (up to four tabs), bookmarks, local history and sharing. Inactive tabs suspend media.
+- Rounded native controls, top address/navigation bar, a tab switcher (up to four tabs), editable bookmarks, local history, page sharing and Copy page link. Inactive tabs and pages hidden behind Home suspend media.
+- Stop slow loads, retry failed pages, and Find in page with previous/next matches and match counts.
 
 - Playback speed saved automatically for each website, including its embedded players. Mobile/www aliases share the setting. Speed is restored on media loading, playing and rate-change events, without a polling loop or document-wide mutation observer.
 - Cross-site navigation and pop-up confirmation for each attempt. Common search engines are exempt. An Allow decision applies only to that request. Embedded video frames and media requests are not treated as page redirects.
@@ -18,7 +19,7 @@ There is no wallpaper, ad blocker, sync/account framework, background playback s
 
 ## Use
 
-Launch the app and enter a website or search. Use the top browser menu for site settings, playback controls, bookmarks, history, search engine and extensions. The tab counter switches tabs. There is no permanent bottom playback toolbar. Speed changes are saved immediately.
+Launch the app and enter a website or search. Use the top browser menu for site settings, playback controls, bookmarks, history, search engine and extensions. The tab counter switches tabs. There is no permanent bottom playback toolbar. Speed changes are saved immediately. Touch and hold a bookmark on Home or in Bookmarks to rename or remove it. Use Menu → Find in page, enter text and press Search or the arrow buttons. Back closes Find first; from Home, Back exits the app.
 
 For a fullscreen shortcut, open the site and select **Menu → Add to home screen**, then accept the Android launcher prompt. Create shortcuts from Lite itself; existing full-app shortcuts still belong to the full app.
 

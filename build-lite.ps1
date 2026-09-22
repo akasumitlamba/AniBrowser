@@ -17,7 +17,7 @@ if (!$TestsOnly) {
     $liteOutput = Join-Path $PSScriptRoot 'output/lite'
     New-Item -ItemType Directory -Path $liteOutput -Force | Out-Null
     Get-ChildItem (Join-Path $liteRoot 'app/build/outputs/apk/debug') -Filter '*.apk' | ForEach-Object {
-        $destination = Join-Path $liteOutput ($_.Name.Replace('app-','AniBrowser-Lite-0.2.0-'))
+        $destination = Join-Path $liteOutput ($_.Name.Replace('app-','AniBrowser-Lite-0.3.0-'))
         Copy-Item -LiteralPath $_.FullName -Destination $destination
         Get-FileHash -LiteralPath $destination -Algorithm SHA256
     }
