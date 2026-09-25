@@ -14,6 +14,8 @@ import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.first
+import mozilla.components.lib.state.ext.flow
 import mozilla.components.browser.state.action.SystemAction
 import mozilla.components.concept.engine.webextension.isUnsupported
 import mozilla.components.concept.push.PushProcessor
@@ -70,6 +72,20 @@ open class BrowserApplication : Application() {
         components.core.engine.warmUp()
 
         restoreBrowserState()
+
+        applicationScope.launch {
+            // Give the first page the startup CPU/network budget. Optional
+            // maintenance begins only after foreground page loading settles.
+            delay(8000)
+            components.core.store.flow().first { state ->
+                state.tabs.none { it.content.loading } &&
+                    state.customTabs.none { it.content.loading }
+            }
+            initializeOptionalFeatures()
+        }
+    }
+
+    private fun initializeOptionalFeatures() {
 
         GlobalAddonDependencyProvider.initialize(
             components.core.addonManager,
@@ -170,7 +186,7 @@ open class BrowserApplication : Application() {
             // the app is used.
             sessionStorage
                 .autoSave(store)
-                .periodicallyInForeground(interval = 30, unit = TimeUnit.SECONDS)
+                .periodicallyInForeground(interval = 120, unit = TimeUnit.SECONDS)
                 .whenGoingToBackground()
                 .whenSessionsChange()
         }

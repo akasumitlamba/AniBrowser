@@ -4,16 +4,16 @@
    - file, You can obtain one at http://mozilla.org/MPL/2.0/. -->
 <resources xmlns:tools="http://schemas.android.com/tools">
     <!-- Deep navy-black background — feels like a theatre screen -->
-    <color name="dark">#FF0F1117</color>
+    <color name="dark">#FF24364D</color>
     <!-- Slightly deeper for nav/status bars -->
-    <color name="evenDarker">#FF090B10</color>
+    <color name="evenDarker">#FF19283C</color>
     <!-- Anime-orange accent: matches Crunchyroll, streaming UIs -->
-    <color name="accent">#FFFF6B35</color>
+    <color name="accent">#FF9ACFFF</color>
 
     <!-- Toolbar -->
-    <color name="toolbarBackgroundColor">#FF0F1117</color>
+    <color name="toolbarBackgroundColor">#FF24364D</color>
     <!-- URL field pill — slightly lighter than the toolbar -->
-    <color name="toolbarUrlBoxColor">#FF1E2130</color>
+    <color name="toolbarUrlBoxColor">#FF3D526C</color>
 
     <!-- Icon tint — pure white for clarity on dark bg -->
     <color name="icons">#FFFFFFFF</color>

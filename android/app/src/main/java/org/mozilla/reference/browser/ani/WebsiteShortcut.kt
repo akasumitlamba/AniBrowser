@@ -82,6 +82,17 @@ object WebsiteShortcut {
 /** Only launch locally registered shortcuts; arbitrary external extras cannot select a URL. */
 class WebsiteActivity : BrowserActivity() {
     private var websiteSession: String? = null
+    var shortcutControls: ShortcutOverlay? = null
+
+    override fun dispatchTouchEvent(event: android.view.MotionEvent): Boolean {
+        if (!isInPictureInPictureMode) shortcutControls?.onTouchEvent(event)
+        return super.dispatchTouchEvent(event)
+    }
+
+    override fun onPause() {
+        shortcutControls?.hide()
+        super.onPause()
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         val id = intent.getStringExtra("shortcut_id").orEmpty()

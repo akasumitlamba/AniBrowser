@@ -25,10 +25,10 @@ test('Block preference still permits direct visits and ordinary cross-site links
   const result=await f.before({tabId:1,requestId:'new',url:'https://b.example/',originUrl:'https://a.example/'});
   assert.equal(result.cancel,undefined);
 });
-test('Block stops a cross-domain HTTP redirect',async()=>{
+test('Block does not cancel YouTube mobile endpoint redirects',async()=>{
   const f=await fixture({});
-  await f.before({tabId:1,requestId:'chain',url:'https://a.example/'});
-  assert.equal((await f.before({tabId:1,requestId:'chain',url:'https://b.example/'})).cancel,true);
+  await f.before({tabId:1,requestId:'chain',url:'https://www.youtube.com/'});
+  assert.equal((await f.before({tabId:1,requestId:'chain',url:'https://m.youtube.com/'})).cancel,undefined);
 });
 test('Allow resumes redirects without changing request method or body',async()=>{
   const f=await fixture({'a.example':true});
@@ -36,9 +36,28 @@ test('Allow resumes redirects without changing request method or body',async()=>
   const result=await f.before({tabId:1,requestId:'chain',url:'https://b.example/',method:'POST'});
   assert.equal(Object.keys(result).length,0);
 });
-test('each redirect hop follows its own source-domain rule',async()=>{
+test('consent and authentication redirect chains retain the original request',async()=>{
   const f=await fixture({'a.example':true,'b.example':false});
   await f.before({tabId:1,requestId:'chain',url:'https://a.example/'});
   await f.before({tabId:1,requestId:'chain',url:'https://b.example/'});
-  assert.equal((await f.before({tabId:1,requestId:'chain',url:'https://c.example/'})).cancel,true);
+  const request={tabId:1,requestId:'chain',url:'https://c.example/',method:'POST',requestBody:{formData:{token:['sample']}}};
+  const before=JSON.stringify(request);
+  assert.equal((await f.before(request)).cancel,undefined);
+  assert.equal(JSON.stringify(request),before);
+});
+
+test('known ad-network destinations remain blocked during redirect chains',async()=>{
+  const f=await fixture({});
+  await f.before({tabId:1,requestId:'ad',url:'https://a.example/'});
+  assert.equal((await f.before({tabId:1,requestId:'ad',url:'https://popads.net/trap'})).cancel,true);
+});
+
+test('ad blocking matches domain boundaries without blocking lookalike sites',async()=>{
+  const f=await fixture({});
+  for (const url of ['https://popads.net.example.org/', 'https://example.org/?next=popads.net', 'https://1xbet.example.org/']) {
+    assert.equal((await f.before({tabId:1,url})).cancel,undefined,url);
+  }
+  for (const url of ['https://popads.net/', 'https://ads.popads.net/', 'https://popads.net./', 'https://1xbet.com/']) {
+    assert.equal((await f.before({tabId:1,url})).cancel,true,url);
+  }
 });

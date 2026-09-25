@@ -4,5 +4,5 @@
    - file, You can obtain one at http://mozilla.org/MPL/2.0/. -->
 <resources>
     <!-- Browser Toolbar -->
-    <dimen name="browser_toolbar_height">56dp</dimen>
+    <dimen name="browser_toolbar_height">52dp</dimen>
 </resources>

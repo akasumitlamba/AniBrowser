@@ -56,7 +56,7 @@ class UseCases(
                 DefaultDownloadFileUtils(
                     context = context,
                     downloadLocation = {
-                        Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS).path
+                        org.mozilla.reference.browser.downloads.DownloadLocation.get(context)
                     },
                 ),
         )

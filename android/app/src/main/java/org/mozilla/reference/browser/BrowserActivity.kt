@@ -35,15 +35,37 @@ import org.mozilla.reference.browser.ext.components
 
 /** Activity that holds the [BrowserFragment]. */
 open class BrowserActivity : AppCompatActivity() {
+    var suppressAddressBackKeyUp = false
+    var addressBackHandledAt = 0L
+
+    override fun dispatchKeyEvent(event: android.view.KeyEvent): Boolean {
+        if (event.keyCode == android.view.KeyEvent.KEYCODE_BACK &&
+            event.action == android.view.KeyEvent.ACTION_UP && suppressAddressBackKeyUp) {
+            suppressAddressBackKeyUp = false
+            return true
+        }
+        return super.dispatchKeyEvent(event)
+    }
+
     override fun onResume() {
         super.onResume()
+        org.mozilla.reference.browser.ani.PlaybackController.setChromeInset(0)
+        org.mozilla.reference.browser.ani.PlaybackController.appVisibility(false)
         org.mozilla.reference.browser.ani.NavigationGuard.bind(this)
+    }
+
+    override fun onStop() {
+        super.onStop()
+        if (!isChangingConfigurations && !isInPictureInPictureMode) {
+            org.mozilla.reference.browser.ani.PlaybackController.appVisibility(true)
+        }
     }
 
     override fun onPause() {
         org.mozilla.reference.browser.ani.NavigationGuard.unbind(this)
         super.onPause()
     }
+    private var pipControls: org.mozilla.reference.browser.pip.PipControls? = null
     private lateinit var crashIntegration: CrashIntegration
 
     private val sessionId: String?
@@ -54,11 +76,36 @@ open class BrowserActivity : AppCompatActivity() {
     }
 
     /** Returns a new instance of [BrowserFragment] to display. */
-    open fun createBrowserFragment(sessionId: String?): Fragment = BrowserFragment.create(sessionId)
+    open fun createBrowserFragment(sessionId: String?): Fragment = BrowserFragment.create()
+
+    private var showBrowserOnResume = false
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        // The receiver already selected/created the requested tab. Reveal it if
+        // this single-task activity was left showing the tabs tray. Defer the
+        // transaction until FragmentManager has resumed after saved state.
+        if (intent.action == Intent.ACTION_VIEW || intent.action == Intent.ACTION_SEND ||
+            intent.action == Intent.ACTION_WEB_SEARCH) {
+            showBrowserOnResume = true
+        }
+    }
+
+    override fun onResumeFragments() {
+        super.onResumeFragments()
+        if (showBrowserOnResume) {
+            showBrowserOnResume = false
+            supportFragmentManager.beginTransaction()
+                .replace(R.id.container, createBrowserFragment(sessionId))
+                .commit()
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        setContentView(R.layout.activity_main)
+        setTheme(R.style.AppThemeNotActionBar)
         super.onCreate(savedInstanceState)
+        setContentView(R.layout.activity_main)
 
         if (this is org.mozilla.reference.browser.ani.WebsiteActivity) {
             enableEdgeToEdge(SystemBarStyle.dark(Color.TRANSPARENT))
@@ -75,6 +122,11 @@ open class BrowserActivity : AppCompatActivity() {
         }
 
         components.notificationsDelegate.bindToActivity(this)
+        pipControls = org.mozilla.reference.browser.pip.PipControls(this).also { it.start() }
+        addOnPictureInPictureModeChangedListener { info ->
+            supportFragmentManager.fragments.filterIsInstance<org.mozilla.reference.browser.browser.BaseBrowserFragment>()
+                .forEach { it.onPictureInPictureModeChanged(info.isInPictureInPictureMode) }
+        }
 
         if (savedInstanceState == null) {
             if (this !is org.mozilla.reference.browser.ani.WebsiteActivity && components.core.store.state.tabs.isEmpty()) {
@@ -99,6 +151,7 @@ open class BrowserActivity : AppCompatActivity() {
             this,
             object : OnBackPressedCallback(true) {
                 override fun handleOnBackPressed() {
+                    if (android.os.SystemClock.uptimeMillis() - addressBackHandledAt < 500L) return
                     supportFragmentManager.fragments.forEach {
                         if (it is UserInteractionHandler && it.onBackPressed()) {
                             return
@@ -127,6 +180,7 @@ open class BrowserActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        pipControls?.stop()
         super.onDestroy()
         components.notificationsDelegate.unBindActivity(this)
     }

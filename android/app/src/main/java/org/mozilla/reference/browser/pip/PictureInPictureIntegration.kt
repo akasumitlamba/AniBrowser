@@ -18,7 +18,7 @@ import mozilla.components.support.base.feature.LifecycleAwareFeature
 
 class PictureInPictureIntegration(
     private val store: BrowserStore,
-    activity: Activity,
+    private val activity: Activity,
     private val customTabId: String?,
     private val whiteList: List<String> = listOf(
         "youtube.com",
@@ -51,15 +51,16 @@ class PictureInPictureIntegration(
 
     fun onHomePressed(): Boolean {
         val selected = store.state.findTabOrCustomTabOrSelectedTab(customTabId)
+        if (!org.mozilla.reference.browser.ani.MediaPreferences.enabled(activity, org.mozilla.reference.browser.ani.MediaPreferences.PIP, selected?.content?.url.orEmpty())) return false
         val isMediaPlaying = selected?.mediaSessionState?.playbackState ==
             mozilla.components.concept.engine.mediasession.MediaSession.PlaybackState.PLAYING
         val isFullScreen = selected?.content?.fullScreen == true
 
-        if (isMediaPlaying || isFullScreen || whiteListed) {
+        if (isMediaPlaying || isFullScreen) {
             val entered = pictureFeature.enterPipModeCompat()
             if (entered) return true
         }
-        return pictureFeature.onHomePressed()
+        return false
     }
 
     private fun isWhitelisted(url: String): Boolean {

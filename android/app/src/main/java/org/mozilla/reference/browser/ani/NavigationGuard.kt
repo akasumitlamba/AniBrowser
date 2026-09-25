@@ -14,7 +14,6 @@ object NavigationGuard {
     private var activity = WeakReference<Activity>(null)
     private var dialog: AlertDialog? = null
     private val handler = Handler(Looper.getMainLooper())
-    private var lastStartupNotice = 0L
     private val siteWaiters = mutableMapOf<String, MutableList<(Boolean) -> Unit>>()
 
     fun bind(value: Activity) { activity = WeakReference(value) }
@@ -85,27 +84,16 @@ object NavigationGuard {
     }
 
     fun intercept(url: String, previous: String?, direct: Boolean, subframe: Boolean): Boolean {
-        val uri = Uri.parse(url)
-        val web = uri.scheme == "https" || uri.scheme == "http"
-        if (!web) {
-            if (url == "about:blank" || (direct && url.startsWith("about:"))) return false
-            if (uri.scheme in listOf("javascript", "data", "file", "content", "resource", "chrome", "about")) return true
-            if (!subframe) confirm(previous, url) { openExternal(url) }
-            return true
-        }
-        // HTTP navigation is paused asynchronously by the built-in extension. Never replay POST as GET.
-        if (!PlaybackController.isReady) {
-            val now = android.os.SystemClock.elapsedRealtime()
-            if (now - lastStartupNotice > 3000) {
-                lastStartupNotice = now
-                handler.post { activity.get()?.let { host ->
-                    android.widget.Toast.makeText(host, "Browser protections are starting. Please reload in a moment.",
-                        android.widget.Toast.LENGTH_LONG).show()
-                } }
+        // The messaging bridge is not a network-readiness signal. Never cancel
+        // normal page requests (or replay a pending POST as GET) while it reconnects.
+        return when (NavigationPolicy.classify(url, direct, subframe)) {
+            NavigationPolicy.Decision.ALLOW -> false
+            NavigationPolicy.Decision.DENY -> true
+            NavigationPolicy.Decision.CONFIRM_EXTERNAL -> {
+                confirm(previous, url) { openExternal(url) }
+                true
             }
-            return true
         }
-        return false
     }
 
     private fun openExternal(url: String) {

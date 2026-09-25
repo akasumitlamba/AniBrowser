@@ -1,221 +1,175 @@
 /* SPDX-License-Identifier: MPL-2.0 */
 package org.mozilla.reference.browser.ani
 
-import android.animation.Animator
-import android.animation.AnimatorListenerAdapter
 import android.content.Context
-import android.graphics.Color
-import android.graphics.drawable.GradientDrawable
+import android.graphics.Rect
 import android.os.Handler
 import android.os.Looper
-import android.view.GestureDetector
 import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
 import android.widget.FrameLayout
+import android.widget.ImageButton
 import android.widget.LinearLayout
 import android.widget.TextView
+import androidx.appcompat.app.AlertDialog
+import androidx.core.content.ContextCompat
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
+import org.mozilla.reference.browser.R
 
-/**
- * Gesture-triggered floating overlay for shortcuts/WebsiteActivity mode.
- *
- * Shows only when the user swipes up from the bottom edge of the screen.
- * Auto-hides after [AUTO_HIDE_MS] ms of no interaction.
- * Provides: playback speed selector, 10-second seek back/forward, view mode toggle.
- */
+/** Observes activity gestures without consuming the site's touch events. */
 class ShortcutOverlay(
-    context: Context,
+    private val context: Context,
     private val container: ViewGroup,
     private val onSpeedSelected: (Double) -> Unit,
-    private val onSeek: (seconds: Int) -> Unit,
-    private val onViewModeSelected: (mode: Int) -> Unit,  // 0=Mobile, 1=DeskId/MobileLayout, 2=Desktop
+    private val onSeek: (Int) -> Unit,
+    private val onViewModeSelected: (Int) -> Unit,
     private val getCurrentSpeed: () -> Double,
     private val getCurrentViewMode: () -> Int,
+    private val onSiteSettings: () -> Unit,
 ) {
-    companion object {
-        private const val AUTO_HIDE_MS = 3500L
-        private val SPEEDS = listOf(1.0, 1.25, 1.5, 1.75, 2.0)
-        private val VIEW_LABELS = listOf("📱 Mobile", "🖥 Desk+Mobile", "💻 Desktop")
-    }
-
     private val handler = Handler(Looper.getMainLooper())
-    private var isVisible = false
-
-    // The pill-shaped overlay panel
-    private val panel: LinearLayout = LinearLayout(context).apply {
-        orientation = LinearLayout.VERTICAL
-        gravity = Gravity.CENTER_HORIZONTAL
-        setPadding(dpToPx(context, 16), dpToPx(context, 12), dpToPx(context, 16), dpToPx(context, 12))
-        background = GradientDrawable().apply {
-            setColor(Color.parseColor("#CC000000"))  // 80% opaque black
-            cornerRadius = dpToPx(context, 20).toFloat()
-        }
-        elevation = dpToPx(context, 8).toFloat()
-        alpha = 0f
+    private val dismiss = Runnable { hide() }
+    private val bounds = Rect()
+    private var downX = 0f
+    private var downY = 0f
+    private var watchScroll = false
+    private var revealed = false
+    private var dialog: AlertDialog? = null
+    private val modes = arrayOf("Mobile", "Desktop identity, mobile layout", "Desktop")
+    private val modeIcons = intArrayOf(R.drawable.ani_phone, R.drawable.ani_hybrid, R.drawable.ani_desktop)
+    private val speeds = listOf(1.0, 1.25, 1.5, 1.75, 2.0)
+    private fun dp(value: Int) = (value * context.resources.displayMetrics.density + .5f).toInt()
+    private val panel = LinearLayout(context).apply {
+        orientation = LinearLayout.HORIZONTAL
+        gravity = Gravity.CENTER_VERTICAL
+        setPadding(dp(6), dp(4), dp(6), dp(4))
+        background = ContextCompat.getDrawable(context, R.drawable.ani_floating_glass)
+        elevation = dp(12).toFloat()
         visibility = View.GONE
     }
+    private val speedButton: TextView
+    private val modeButton: ImageButton
+    private val layoutListener = View.OnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> position() }
 
     init {
-        buildPanel(context)
-        val lp = FrameLayout.LayoutParams(
-            ViewGroup.LayoutParams.WRAP_CONTENT,
-            ViewGroup.LayoutParams.WRAP_CONTENT,
-        ).apply {
-            gravity = Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
-            bottomMargin = dpToPx(context, 24)
+        fun icon(drawable: Int, label: String, action: () -> Unit): ImageButton = ImageButton(context).apply {
+            setImageResource(drawable)
+            contentDescription = label
+            background = ContextCompat.getDrawable(context, R.drawable.ani_button_ripple)
+            setPadding(dp(12), dp(12), dp(12), dp(12))
+            setOnClickListener { action(); resetAutoHide() }
+            panel.addView(this, LinearLayout.LayoutParams(0, dp(48), 1f))
         }
-        container.addView(panel, lp)
-
-        // Touch interceptor on the container to detect upward swipe from bottom edge
-        val gestureDetector = GestureDetector(context, object : GestureDetector.SimpleOnGestureListener() {
-            override fun onFling(e1: MotionEvent?, e2: MotionEvent, velocityX: Float, velocityY: Float): Boolean {
-                if (e1 == null) return false
-                val dy = e1.y - e2.y
-                val screenH = container.height.toFloat()
-                // Upward fling starting from bottom third of screen
-                if (dy > 80 && e1.y > screenH * 0.6f) {
-                    show()
-                    return true
+        icon(R.drawable.ani_rewind, "Back 10 seconds") { onSeek(-10) }
+        speedButton = TextView(context).apply {
+            gravity = Gravity.CENTER
+            setTextColor(android.graphics.Color.WHITE)
+            textSize = 15f
+            background = ContextCompat.getDrawable(context, R.drawable.ani_button_ripple)
+            setOnClickListener {
+                choose("Playback speed", speeds.map { "${it}×" }.toTypedArray(), speeds.indexOf(getCurrentSpeed())) {
+                    onSpeedSelected(speeds[it]); refreshLabels()
                 }
-                return false
             }
-        })
-        container.setOnTouchListener { _, event ->
-            gestureDetector.onTouchEvent(event)
-            false  // don't consume — let EngineView also receive touches
+            panel.addView(this, LinearLayout.LayoutParams(0, dp(48), 1f))
+        }
+        icon(R.drawable.ani_forward, "Forward 10 seconds") { onSeek(10) }
+        modeButton = icon(R.drawable.ani_phone, "Viewing mode") {
+            choose("Viewing mode", modes, getCurrentViewMode()) { onViewModeSelected(it); refreshLabels() }
+        }
+        icon(R.drawable.mozac_ic_settings_24, "Site settings") { hide(); onSiteSettings() }
+        icon(R.drawable.mozac_ic_cross_24, "Hide site controls") { hide() }
+        container.addView(panel, FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL))
+        container.addOnLayoutChangeListener(layoutListener)
+        position()
+    }
+
+    private fun choose(title: String, labels: Array<String>, selected: Int, changed: (Int) -> Unit) {
+        handler.removeCallbacks(dismiss)
+        dialog?.dismiss()
+        dialog = AlertDialog.Builder(context).setTitle(title)
+            .setSingleChoiceItems(labels, selected) { chooser, index -> changed(index); chooser.dismiss() }
+            .setNegativeButton("Cancel", null)
+            .setOnDismissListener { dialog = null; resetAutoHide() }.show()
+    }
+
+    private fun position() {
+        if (container.width <= 0) return
+        val insets = ViewCompat.getRootWindowInsets(container)?.getInsets(
+            WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout())
+        val width = minOf(dp(480), container.width - (insets?.left ?: 0) - (insets?.right ?: 0) - dp(24)).coerceAtLeast(0)
+        val bottom = dp(12) + (insets?.bottom ?: 0)
+        val params = panel.layoutParams as FrameLayout.LayoutParams
+        if (params.width != width || params.bottomMargin != bottom) {
+            params.width = width
+            params.bottomMargin = bottom
+            panel.layoutParams = params
         }
     }
 
-    private fun buildPanel(context: Context) {
-        // Speed row label
-        panel.addView(makeLabel(context, "Playback Speed"))
-
-        // Speed buttons row
-        val speedRow = LinearLayout(context).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER
-        }
-        for (speed in SPEEDS) {
-            val btn = makeButton(context, "${speed}×") {
-                onSpeedSelected(speed)
-                refreshSpeedHighlight(speedRow)
-                resetAutoHide()
+    fun onTouchEvent(event: MotionEvent) {
+        when (event.actionMasked) {
+            MotionEvent.ACTION_DOWN -> {
+                downX = event.rawX; downY = event.rawY; revealed = false
+                val inside = panel.visibility == View.VISIBLE && panel.getGlobalVisibleRect(bounds) &&
+                    bounds.contains(event.rawX.toInt(), event.rawY.toInt())
+                val keyboard = ViewCompat.getRootWindowInsets(container)?.isVisible(WindowInsetsCompat.Type.ime()) == true
+                watchScroll = !inside && !keyboard && dialog == null
+                if (inside) handler.removeCallbacks(dismiss)
             }
-            btn.tag = speed
-            speedRow.addView(btn)
-        }
-        panel.addView(speedRow)
-
-        // Seek row label
-        panel.addView(makeLabel(context, "Seek"))
-
-        // Seek buttons row
-        val seekRow = LinearLayout(context).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER
-        }
-        seekRow.addView(makeButton(context, "⏪ 10s") { onSeek(-10); resetAutoHide() })
-        seekRow.addView(makeButton(context, "⏩ 10s") { onSeek(10); resetAutoHide() })
-        panel.addView(seekRow)
-
-        // View mode label
-        panel.addView(makeLabel(context, "View Mode"))
-
-        // View mode buttons row
-        val modeRow = LinearLayout(context).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER
-        }
-        for ((idx, label) in VIEW_LABELS.withIndex()) {
-            val btn = makeButton(context, label) {
-                onViewModeSelected(idx)
-                resetAutoHide()
+            MotionEvent.ACTION_MOVE -> if (watchScroll && !revealed && event.pointerCount == 1) {
+                val distance = kotlin.math.abs(event.rawY - downY)
+                if (distance >= dp(24) && distance > kotlin.math.abs(event.rawX - downX) * 1.3f) {
+                    revealed = true
+                    show()
+                }
             }
-            modeRow.addView(btn)
+            MotionEvent.ACTION_POINTER_DOWN -> watchScroll = false
+            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> { watchScroll = false; resetAutoHide() }
         }
-        panel.addView(modeRow)
-
-        // Close / dismiss hint
-        val closeBtn = makeButton(context, "✕ Hide") {
-            hide()
-        }
-        panel.addView(closeBtn)
     }
 
-    private fun refreshSpeedHighlight(speedRow: LinearLayout) {
-        val current = getCurrentSpeed()
-        for (i in 0 until speedRow.childCount) {
-            val btn = speedRow.getChildAt(i) as? TextView ?: continue
-            val isSelected = (btn.tag as? Double) == current
-            btn.setTextColor(if (isSelected) Color.parseColor("#FF6B35") else Color.WHITE)
-        }
+    private fun refreshLabels() {
+        speedButton.text = "${getCurrentSpeed()}×"
+        speedButton.contentDescription = "Playback speed ${getCurrentSpeed()} times"
+        val mode = getCurrentViewMode().coerceIn(0, 2)
+        modeButton.setImageResource(modeIcons[mode])
+        modeButton.contentDescription = "Viewing mode: ${modes[mode]}"
     }
 
     fun show() {
-        if (isVisible) { resetAutoHide(); return }
-        isVisible = true
-        panel.visibility = View.VISIBLE
-        panel.animate()
-            .alpha(1f)
-            .setDuration(200)
-            .setListener(null)
-            .start()
+        refreshLabels()
+        position()
+        if (panel.visibility != View.VISIBLE) {
+            panel.animate().cancel()
+            panel.visibility = View.VISIBLE
+            panel.alpha = 0f
+            panel.translationY = dp(8).toFloat()
+            panel.animate().alpha(1f).translationY(0f).setDuration(160).start()
+        }
         resetAutoHide()
     }
 
-    fun hide() {
-        if (!isVisible) return
-        isVisible = false
-        handler.removeCallbacksAndMessages(null)
-        panel.animate()
-            .alpha(0f)
-            .setDuration(200)
-            .setListener(object : AnimatorListenerAdapter() {
-                override fun onAnimationEnd(animation: Animator) {
-                    panel.visibility = View.GONE
-                }
-            })
-            .start()
+    fun hide(): Boolean {
+        val visible = panel.visibility == View.VISIBLE
+        handler.removeCallbacks(dismiss)
+        panel.animate().cancel()
+        panel.visibility = View.GONE
+        return visible
     }
 
     private fun resetAutoHide() {
-        handler.removeCallbacksAndMessages(null)
-        handler.postDelayed({ hide() }, AUTO_HIDE_MS)
+        handler.removeCallbacks(dismiss)
+        if (panel.visibility == View.VISIBLE && dialog == null) handler.postDelayed(dismiss, 4500L)
     }
 
-    private fun makeLabel(context: Context, text: String): TextView = TextView(context).apply {
-        this.text = text
-        textSize = 11f
-        setTextColor(Color.parseColor("#AAAAAA"))
-        val v = dpToPx(context, 4)
-        val h = dpToPx(context, 2)
-        setPadding(h, v, h, 0)
+    fun dispose() {
+        hide()
+        dialog?.dismiss()
+        container.removeOnLayoutChangeListener(layoutListener)
+        container.removeView(panel)
     }
-
-    private fun makeButton(context: Context, label: String, onClick: () -> Unit): TextView =
-        TextView(context).apply {
-            text = label
-            textSize = 14f
-            setTextColor(Color.WHITE)
-            gravity = Gravity.CENTER
-            background = GradientDrawable().apply {
-                setColor(Color.parseColor("#44FFFFFF"))
-                cornerRadius = dpToPx(context, 8).toFloat()
-            }
-            val hp = dpToPx(context, 12)
-            val vp = dpToPx(context, 6)
-            val m = dpToPx(context, 4)
-            setPadding(hp, vp, hp, vp)
-            (layoutParams as? ViewGroup.MarginLayoutParams)?.setMargins(m, m, m, m)
-                ?: run { layoutParams = LinearLayout.LayoutParams(
-                    LinearLayout.LayoutParams.WRAP_CONTENT,
-                    LinearLayout.LayoutParams.WRAP_CONTENT
-                ).also { it.setMargins(m, m, m, m) }
-                }
-            setOnClickListener { onClick() }
-        }
-
-    private fun dpToPx(context: Context, dp: Int): Int =
-        (dp * context.resources.displayMetrics.density + 0.5f).toInt()
 }

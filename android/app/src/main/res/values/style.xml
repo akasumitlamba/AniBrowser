@@ -10,31 +10,55 @@
         fitsSystemWindows + ViewCompat.setOnApplyWindowInsetsListener in the toolbar.
     -->
     <style name="AppThemeNotActionBar" parent="Theme.Material3.Dark.NoActionBar">
+        <item name="alertDialogTheme">@style/AniGlassDialog</item>
+        <item name="android:colorBackground">@color/dark</item>
+        <item name="colorControlActivated">#78E4CA</item>
+        <item name="colorControlNormal">#DCE9F0</item>
+        <item name="colorControlHighlight">#5578E4CA</item>
+        <item name="colorSecondary">#78E4CA</item>
+        <item name="colorOnSecondary">#102D2A</item>
+        <item name="android:colorControlActivated">#78E4CA</item>
+        <item name="android:popupBackground">@drawable/ani_glass_surface</item>
         <item name="preferenceTheme">@style/PreferenceThemeOverlay</item>
 
-        <item name="colorPrimary">@color/dark</item>
+        <item name="colorPrimary">#9FE8DE</item>
+        <item name="colorSecondaryContainer">#2D6F65</item>
+        <item name="colorOnSecondaryContainer">#FFFFFF</item>
         <item name="colorPrimaryDark">@color/evenDarker</item>
         <item name="colorAccent">@color/accent</item>
+        <item name="android:textColorHighlight">#6678E4CA</item>
         <!-- Material3 tonal surface — matches our deep navy palette -->
         <item name="colorSurface">@color/dark</item>
         <item name="colorOnSurface">@color/icons</item>
 
         <item name="android:navigationBarColor">@color/evenDarker</item>
         <item name="android:statusBarColor">@color/evenDarker</item>
-        <item name="android:windowBackground">@color/dark</item>
+        <item name="android:windowBackground">@drawable/ani_glass_backdrop</item>
     </style>
 
     <!-- Settings / non-browser activities -->
     <style name="AppTheme" parent="Theme.Material3.Dark">
+        <item name="alertDialogTheme">@style/AniGlassDialog</item>
+        <item name="android:colorBackground">@color/dark</item>
+        <item name="colorControlActivated">#78E4CA</item>
+        <item name="colorControlNormal">#DCE9F0</item>
+        <item name="colorControlHighlight">#5578E4CA</item>
+        <item name="colorSecondary">#78E4CA</item>
+        <item name="colorOnSecondary">#102D2A</item>
+        <item name="android:colorControlActivated">#78E4CA</item>
+        <item name="android:popupBackground">@drawable/ani_glass_surface</item>
         <item name="preferenceTheme">@style/PreferenceThemeOverlay</item>
 
-        <item name="colorPrimary">@color/dark</item>
+        <item name="colorPrimary">#9FE8DE</item>
+        <item name="colorSecondaryContainer">#2D6F65</item>
+        <item name="colorOnSecondaryContainer">#FFFFFF</item>
         <item name="colorPrimaryDark">@color/evenDarker</item>
         <item name="colorAccent">@color/accent</item>
+        <item name="android:textColorHighlight">#6678E4CA</item>
 
         <item name="android:navigationBarColor">@color/evenDarker</item>
         <item name="android:statusBarColor">@color/evenDarker</item>
-        <item name="android:windowBackground">@color/dark</item>
+        <item name="android:windowBackground">@drawable/ani_glass_backdrop</item>
         <!-- Allow settings activities to opt out so they don't need inset handling -->
         <item name="android:windowOptOutEdgeToEdgeEnforcement" tools:targetApi="35">true</item>
     </style>
@@ -42,5 +66,19 @@
     <style name="AddonsActivityTheme" parent="AppTheme">
         <item name="mozac_primary_text_color">@color/photonDarkGrey90</item>
         <item name="android:windowOptOutEdgeToEdgeEnforcement" tools:targetApi="35">true</item>
+    </style>
+    <style name="AniGlassDialog" parent="ThemeOverlay.Material3.MaterialAlertDialog">
+        <item name="android:windowBackground">@drawable/ani_glass_surface</item>
+        <item name="android:backgroundDimAmount">0.32</item>
+        <item name="colorSurface">#354A64</item>
+        <item name="colorPrimary">@color/accent</item>
+        <item name="android:textColorHighlight">#6678E4CA</item>
+        <item name="android:colorAccent">@color/accent</item>
+        <item name="android:textColorPrimary">#F5F9FF</item>
+        <item name="android:textColorSecondary">#CCDBEC</item>
+        <item name="shapeAppearanceMediumComponent">@style/AniGlassShape</item>
+    </style>
+    <style name="AniGlassShape" parent="ShapeAppearance.Material3.Corner.ExtraLarge">
+        <item name="cornerSize">28dp</item>
     </style>
 </resources>

@@ -20,7 +20,11 @@
       const isRecentUserAction = (now - lastUserActionTime) < 1200;
 
       // Ad URL heuristics
-      const isAdUrl = url && /popads|popcash|adsterra|propeller|exoclick|syndication|doubleclick|bet365|onclickads|trafficfactory|tsyndicate|adservice/i.test(url);
+      let isAdUrl = false;
+      try {
+        const hostname = new URL(url, document.baseURI).hostname;
+        isAdUrl = /(?:^|\.)(?:popads\.net|popcash\.net|adsterra\.com|propellerads\.com|exoclick\.com|exosrv\.com|tsyndicate\.com|trafficfactory\.biz|doubleclick\.net|googleadservices\.com|googlesyndication\.com|adservice\.google\.com|onclickads\.net|adtrue\.com|adnxs\.com|juicyads\.com|bet365\.com|1xbet\.com)\.?$/i.test(hostname);
+      } catch (_) {}
       if (isAdUrl) {
         return null;
       }
@@ -41,12 +45,17 @@
   // 2. Clickjack Overlay Buster: Remove full-screen invisible click interceptors
   function defangOverlays() {
     try {
-      const allDivs = document.querySelectorAll("div, a, span");
+      // A transparent high-z-index layer can be a site's menu, consent dialog,
+      // or player controls. Only inspect elements explicitly marked as ads.
+      const allDivs = document.querySelectorAll('.ad-overlay, #ad-overlay');
       const vw = window.innerWidth || document.documentElement.clientWidth;
       const vh = window.innerHeight || document.documentElement.clientHeight;
 
-      for (let i = 0; i < allDivs.length; i++) {
+      for (let i = 0; i < Math.min(allDivs.length, 64); i++) {
         const el = allDivs[i];
+        // Never remove a player/compositor surface merely because its overlay
+        // is transparent; replacing that surface can restart video rendering.
+        if (el.matches('video, iframe') || el.querySelector('video, iframe') || el.closest('[class*="player"], [id*="player"]')) continue;
         const style = window.getComputedStyle(el);
         if (style.position === "fixed" || style.position === "absolute") {
           const z = parseInt(style.zIndex, 10);
@@ -102,11 +111,5 @@
     defangOverlays();
   }
 
-  // Periodic safety check for dynamically injected ad overlays
-  let checks = 0;
-  const timer = setInterval(() => {
-    defangOverlays();
-    injectCosmeticFilter();
-    if (++checks > 8) clearInterval(timer);
-  }, 1000);
+  // CSS handles dynamically inserted ad nodes without periodic layout scans.
 })();

@@ -307,6 +307,7 @@ dependencies {
 
     androidTestImplementation libs.hamcrest.core
     androidTestImplementation libs.hamcrest.library
+    testImplementation libs.junit
     androidTestImplementation libs.junit
     androidTestImplementation libs.mockwebserver
     androidTestImplementation libs.okhttp

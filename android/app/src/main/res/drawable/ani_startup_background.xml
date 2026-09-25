@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:drawable="@color/ani_startup_background" />
+    <item android:width="64dp" android:height="64dp" android:gravity="center"
+        android:drawable="@drawable/ani_logo" />
+</layer-list>

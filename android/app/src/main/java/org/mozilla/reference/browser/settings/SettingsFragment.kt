@@ -49,6 +49,7 @@ class SettingsFragment : PreferenceFragmentCompat() {
         rootKey: String?,
     ) {
         setPreferencesFromResource(R.xml.preferences, rootKey)
+        setupPreferences()
     }
 
     override fun onResume() {
@@ -61,6 +62,15 @@ class SettingsFragment : PreferenceFragmentCompat() {
     }
 
     private fun setupPreferences() {
+        listOf("background_play", "picture_in_picture").forEach { key ->
+            findPreference<SwitchPreferenceCompat>(key)?.apply {
+                isChecked = org.mozilla.reference.browser.ani.MediaPreferences.global(requireContext(), key)
+                onPreferenceChangeListener = OnPreferenceChangeListener { _, value ->
+                    org.mozilla.reference.browser.ani.MediaPreferences.setGlobal(requireContext(), key, value as Boolean)
+                    true
+                }
+            }
+        }
         val signInKey = requireContext().getPreferenceKey(pref_key_sign_in)
         val signInPairKey = requireContext().getPreferenceKey(pref_key_pair_sign_in)
         val firefoxAccountKey = requireContext().getPreferenceKey(pref_key_firefox_account)
@@ -96,6 +106,13 @@ class SettingsFragment : PreferenceFragmentCompat() {
             isChecked = prefs.getBoolean("adshield_enabled", true)
             onPreferenceChangeListener = OnPreferenceChangeListener { _, newValue ->
                 prefs.edit().putBoolean("adshield_enabled", newValue as Boolean).apply()
+                true
+            }
+        }
+        findPreference<Preference>("ani_dns")?.apply {
+            summary = org.mozilla.reference.browser.ani.DnsPreferences.summary(requireContext())
+            setOnPreferenceClickListener {
+                org.mozilla.reference.browser.ani.DnsPreferences.choose(requireContext()) { setupPreferences() }
                 true
             }
         }

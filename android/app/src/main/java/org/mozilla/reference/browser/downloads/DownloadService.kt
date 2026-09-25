@@ -27,9 +27,7 @@ class DownloadService : AbstractFetchDownloadService() {
     override val downloadFileUtils: DownloadFileUtils by lazy {
         DefaultDownloadFileUtils(
             context = applicationContext,
-            downloadLocation = {
-                Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS).path
-            },
+            downloadLocation = { DownloadLocation.get(applicationContext) },
         )
     }
     override val downloadFileWriter: DownloadFileWriter by lazy {
@@ -39,4 +37,16 @@ class DownloadService : AbstractFetchDownloadService() {
         )
     }
     override val packageNameProvider: PackageNameProvider by lazy { DefaultPackageNameProvider(applicationContext) }
+}
+
+object DownloadLocation {
+    fun get(context: android.content.Context): String {
+        val publicDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+        if (!publicDir.exists()) {
+            try {
+                publicDir.mkdirs()
+            } catch (_: Exception) {}
+        }
+        return publicDir.path
+    }
 }

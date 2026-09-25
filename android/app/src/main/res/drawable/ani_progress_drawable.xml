@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Background track -->
+    <item android:id="@android:id/background">
+        <shape android:shape="rectangle">
+            <corners android:radius="4dp" />
+            <solid android:color="#141E2E" />
+        </shape>
+    </item>
+
+    <!-- Progress indicator with anime gradient (vibrant purple to cyan glow) -->
+    <item android:id="@android:id/progress">
+        <clip>
+            <shape android:shape="rectangle">
+                <corners android:radius="4dp" />
+                <gradient
+                    android:startColor="#8B5CF6"
+                    android:centerColor="#6366F1"
+                    android:endColor="#06B6D4"
+                    android:angle="0" />
+            </shape>
+        </clip>
+    </item>
+</layer-list>

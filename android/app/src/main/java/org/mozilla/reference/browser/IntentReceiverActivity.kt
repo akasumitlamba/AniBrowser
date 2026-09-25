@@ -8,12 +8,21 @@ import android.app.Activity
 import android.content.Intent
 import android.os.Bundle
 import kotlinx.coroutines.MainScope
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import org.mozilla.reference.browser.ext.components
 
 class IntentReceiverActivity : Activity() {
+    private val intentScope = MainScope()
+
+    override fun onDestroy() {
+        intentScope.cancel()
+        super.onDestroy()
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        setContentView(R.layout.ani_loading_screen)
         val intent = intent?.let { Intent(it) } ?: Intent()
 
         // Explicitly remove the new task and clear task flags (Our browser activity is a single
@@ -25,9 +34,18 @@ class IntentReceiverActivity : Activity() {
         // do not want to propagate this flag from the launcher activity to the browser.
         intent.flags = intent.flags and Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS.inv()
 
+        // The launcher has no URL to classify. Avoid initializing all external
+        // intent processors and their dependencies for ordinary app startup.
+        if (intent.action == Intent.ACTION_MAIN && intent.data == null) {
+            intent.setClass(this, BrowserActivity::class.java)
+            startActivity(intent)
+            finish()
+            return
+        }
+
         val utils = components.utils
 
-        MainScope().launch {
+        intentScope.launch {
             val processor = utils.intentProcessors.firstOrNull { it.process(intent) }
 
             val className =

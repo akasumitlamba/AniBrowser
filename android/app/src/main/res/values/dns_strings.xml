@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="dns_provider_title">DNS provider</string>
+    <string name="dns_system_summary">System default · Uses Android’s DNS settings</string>
+    <string name="dns_provider_summary">%1$s · DNS over HTTPS with system fallback</string>
+    <string name="dns_custom_name">Custom DNS provider</string>
+    <string name="dns_endpoint_label">DNS-over-HTTPS endpoint URL</string>
+    <string name="dns_custom_description">Enter your provider’s full DNS-over-HTTPS URL. AniBrowser uses system DNS if the provider cannot resolve a domain. This applies to browser traffic; existing connections may continue until reloaded.</string>
+    <string name="dns_save">Save</string>
+    <string name="dns_invalid_endpoint">Enter a valid HTTPS URL without a username, password, or fragment.</string>
+    <string name="dns_explanation">Choose a provider for browser DNS over HTTPS. System DNS is used if the provider cannot resolve a domain. Reload websites after changing this setting.</string>
+</resources>

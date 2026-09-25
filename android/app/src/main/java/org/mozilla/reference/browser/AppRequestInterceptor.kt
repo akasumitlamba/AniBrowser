@@ -34,15 +34,6 @@ class AppRequestInterceptor(private val context: Context) : RequestInterceptor {
     ): RequestInterceptor.InterceptionResponse? {
         if (!isSubframeRequest && (uri.startsWith("http://") || uri.startsWith("https://"))) {
             org.mozilla.reference.browser.ani.SiteSettings.apply(context, engineSession, uri)
-            if (!isDirectNavigation && !hasUserGesture && !isSameDomain && !lastUri.isNullOrBlank() &&
-                org.mozilla.reference.browser.ani.SiteSettings.redirects(context, lastUri) != true) {
-                return RequestInterceptor.InterceptionResponse.Deny
-            }
-        }
-        if (isDirectNavigation && !org.mozilla.reference.browser.ani.PlaybackController.isReady &&
-            (uri.startsWith("https://") || uri.startsWith("http://"))) {
-            org.mozilla.reference.browser.ani.PlaybackController.loadWhenReady(engineSession, uri)
-            return RequestInterceptor.InterceptionResponse.Deny
         }
         if (org.mozilla.reference.browser.ani.NavigationGuard.intercept(
                 uri, lastUri, isDirectNavigation, isSubframeRequest)) {
@@ -88,7 +79,7 @@ class AppRequestInterceptor(private val context: Context) : RequestInterceptor {
             }
 
             else -> {
-                context.components.services.accountsAuthFeature.interceptor.onLoadRequest(
+                val accountResponse = if (uri.startsWith(org.mozilla.reference.browser.components.BackgroundServices.REDIRECT_URL)) context.components.services.accountsAuthFeature.interceptor.onLoadRequest(
                     engineSession,
                     uri,
                     lastUri,
@@ -97,8 +88,8 @@ class AppRequestInterceptor(private val context: Context) : RequestInterceptor {
                     isRedirect,
                     isDirectNavigation,
                     isSubframeRequest,
-                )
-                    ?: context.components.services.appLinksInterceptor.onLoadRequest(
+                ) else null
+                accountResponse ?: context.components.services.appLinksInterceptor.onLoadRequest(
                         engineSession,
                         uri,
                         lastUri,

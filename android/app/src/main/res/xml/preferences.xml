@@ -3,22 +3,25 @@
    - License, v. 2.0. If a copy of the MPL was not distributed with this
    - file, You can obtain one at http://mozilla.org/MPL/2.0/. -->
 
-<androidx.preference.PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android">
+<androidx.preference.PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto">
 
+    <PreferenceCategory android:title="Browsing" android:key="category_browsing" />
     <androidx.preference.Preference android:key="ani_search" android:title="Default search engine" />
+    <androidx.preference.Preference android:key="ani_dns" android:title="@string/dns_provider_title" />
+    <androidx.preference.Preference android:key="ani_dns_info" android:summary="@string/dns_explanation" android:selectable="false" />
 
     <androidx.preference.Preference
-            android:key="@string/pref_key_sign_in"
+            android:key="@string/pref_key_sign_in" app:isPreferenceVisible="false"
             android:title="@string/sign_in"
             android:summary="@string/preferences_sign_in_summary"/>
 
     <androidx.preference.Preference
-        android:key="@string/pref_key_pair_sign_in"
+        android:key="@string/pref_key_pair_sign_in" app:isPreferenceVisible="false"
         android:title="@string/pair_sign_in"
         android:summary="@string/preferences_pair_sign_in_summary"/>
 
     <androidx.preference.Preference
-        android:key="@string/pref_key_firefox_account"
+        android:key="@string/pref_key_firefox_account" app:isPreferenceVisible="false"
         android:title="@string/firefox_account" />
 
     <androidx.preference.Preference
@@ -40,11 +43,10 @@
         android:title="@string/preferences_autofill"
         android:summary="@string/preferences_autofill_summary" />
 
-    <androidx.preference.SwitchPreferenceCompat
-        android:key="@string/pref_key_compose_ui"
-        android:defaultValue="false"
-        android:title="@string/preferences_compose_ui"/>
-
+    <PreferenceCategory android:title="Playback" android:key="category_playback">
+        <androidx.preference.SwitchPreferenceCompat android:key="background_play" android:title="Background play" android:summary="Keep audio playing outside the browser. Per-site choices apply when enabled." android:defaultValue="true" />
+        <androidx.preference.SwitchPreferenceCompat android:key="picture_in_picture" android:title="Picture-in-Picture" android:summary="Float playing video when leaving the browser. Per-site choices apply when enabled." android:defaultValue="true" />
+    </PreferenceCategory>
     <PreferenceCategory
         android:title="@string/developer_tools_category">
 

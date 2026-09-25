@@ -9,11 +9,12 @@ import android.content.Intent
 import androidx.core.content.ContextCompat
 import androidx.core.content.res.ResourcesCompat
 import kotlinx.coroutines.MainScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.distinctUntilChangedBy
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import mozilla.components.browser.domains.autocomplete.ShippedDomainsProvider
-import mozilla.components.browser.menu2.BrowserMenuController
 import mozilla.components.browser.state.selector.selectedTab
 import mozilla.components.browser.state.state.SessionState
 import mozilla.components.browser.state.store.BrowserStore
@@ -44,9 +45,9 @@ import org.mozilla.reference.browser.settings.SettingsActivity
 @Suppress("LongParameterList")
 class ToolbarIntegration(
     private val context: Context,
-    toolbar: BrowserToolbar,
+    private val toolbar: BrowserToolbar,
     historyStorage: PlacesHistoryStorage,
-    store: BrowserStore,
+    private val store: BrowserStore,
     private val sessionUseCases: SessionUseCases,
     private val tabsUseCases: TabsUseCases,
     private val webAppUseCases: WebAppUseCases,
@@ -58,6 +59,14 @@ class ToolbarIntegration(
         }
 
     private val scope = MainScope()
+    private var menuJob: Job? = null
+
+    private fun revealHome() {
+        toolbar.rootView.findViewById<org.mozilla.reference.browser.ani.AnimeHubView>(R.id.animeHubView)?.apply {
+            visibility = android.view.View.VISIBLE
+            loadContent()
+        }
+    }
 
     private fun menuToolbar(session: SessionState?): RowMenuCandidate {
         val tint = ContextCompat.getColor(context, R.color.icons)
@@ -117,6 +126,7 @@ class ToolbarIntegration(
                 } else {
                     sessionUseCases.loadUrl.invoke("about:home")
                 }
+                revealHome()
             }
 
         return RowMenuCandidate(listOf(home, forward, refresh, stop))
@@ -203,9 +213,7 @@ class ToolbarIntegration(
             )
     }
 
-    private val browserMenuController: MenuController = BrowserMenuController(
-        style = mozilla.components.concept.menu.MenuStyle(backgroundColor = android.graphics.Color.parseColor("#152033"))
-    )
+    private val browserMenuController: MenuController = org.mozilla.reference.browser.ani.GlassMenuController()
 
     init {
         toolbar.display.apply {
@@ -216,6 +224,10 @@ class ToolbarIntegration(
             displayIndicatorSeparator = false
             menuController = browserMenuController
             hint = context.getString(R.string.toolbar_hint)
+            urlFormatter = { url ->
+                val s = url.toString()
+                if (s == "about:home" || s == "about:blank") "" else url
+            }
 
             setUrlBackground(ResourcesCompat.getDrawable(context.resources, R.drawable.url_background, context.theme))
         }
@@ -232,6 +244,7 @@ class ToolbarIntegration(
                         } else {
                             sessionUseCases.loadUrl.invoke("about:home")
                         }
+                        revealHome()
                     },
                 )
             )
@@ -245,16 +258,38 @@ class ToolbarIntegration(
             updateAutocompleteProviders(listOf(historyStorage, shippedDomainsProvider))
         }
 
-        scope.launch {
+        val editUrlId = context.resources.getIdentifier("mozac_browser_toolbar_edit_url_view", "id", context.packageName)
+        if (editUrlId != 0) {
+            toolbar.findViewById<android.widget.EditText>(editUrlId)?.let { editView ->
+                editView.setOnFocusChangeListener { _, hasFocus ->
+                    if (hasFocus) {
+                        val text = editView.text?.toString()?.trim().orEmpty()
+                        if (text == "about:home" || text == "about:blank") {
+                            editView.setText("")
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private fun observeMenu() {
+        menuJob?.cancel()
+        menuJob = scope.launch {
             store
                 .flow()
                 .map { state -> state.selectedTab }
-                .distinctUntilChanged()
+                .distinctUntilChangedBy { tab ->
+                    // Playback position updates do not change menu contents.
+                    listOf(tab?.id, tab?.content?.url, tab?.content?.title,
+                        tab?.content?.canGoForward, tab?.content?.icon)
+                }
                 .collect { tab ->
                     browserMenuController.submitList(menuItems(tab).map { item ->
                         if (item is TextMenuCandidate) item.copy(start = DrawableMenuIcon(context, when (item.text) {
                             "New private tab" -> R.drawable.mozac_ic_private_mode_24
-                            "New tab", "Add-ons" -> R.drawable.ani_plus
+                            "New tab" -> R.drawable.ani_plus
+                            "Add-ons" -> R.drawable.ani_extensions
                             "Close tab" -> R.drawable.mozac_ic_cross_24
                             "Share" -> R.drawable.ani_share
                             "Copy link" -> R.drawable.ani_copy
@@ -262,7 +297,8 @@ class ToolbarIntegration(
                             "Find in Page" -> R.drawable.ani_search
                             "About AniBrowser" -> R.drawable.ani_info
                             "Site settings" -> R.drawable.mozac_ic_shield_24
-                            "Add to AniHome", "Add to homescreen" -> R.drawable.mozac_ic_home_24
+                            "Add to AniHome" -> R.drawable.ani_home_add
+                            "Add to homescreen" -> R.drawable.ani_shortcut
                             else -> R.drawable.mozac_ic_settings_24
                         }, tint = android.graphics.Color.parseColor("#9AC5FF"))) else item
                     })
@@ -283,11 +319,41 @@ class ToolbarIntegration(
             sessionId,
         )
 
+    private var toolbarStateJob: Job? = null
+
+    private fun observeToolbarState() {
+        toolbarStateJob?.cancel()
+        toolbarStateJob = scope.launch {
+            store
+                .flow()
+                .map { state ->
+                    val tab = state.selectedTab
+                    Pair(tab?.content?.url.orEmpty(), tab?.content?.loading == true)
+                }
+                .distinctUntilChanged()
+                .collect { (url, _) ->
+                    val isHome = url.isBlank() || url == "about:home" || url == "about:blank"
+                    toolbar.display.indicators = if (isHome) emptyList() else listOf(DisplayToolbar.Indicators.SECURITY)
+                    if (isHome) {
+                        toolbar.post {
+                            toolbar.url = ""
+                        }
+                    }
+                }
+        }
+    }
+
     override fun start() {
         toolbarFeature.start()
+        observeMenu()
+        observeToolbarState()
     }
 
     override fun stop() {
+        toolbarStateJob?.cancel()
+        toolbarStateJob = null
+        menuJob?.cancel()
+        menuJob = null
         toolbarFeature.stop()
     }
 

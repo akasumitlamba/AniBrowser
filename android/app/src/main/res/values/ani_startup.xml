@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="ani_startup_background">#0C1420</color>
+    <string name="ani_opening_app">Opening AniBrowser…</string>
+    <string name="ani_loading_website">Loading website…</string>
+    <style name="AniStartupTheme" parent="AppThemeNotActionBar">
+        <item name="android:windowBackground">@drawable/ani_startup_background</item>
+    </style>
+</resources>

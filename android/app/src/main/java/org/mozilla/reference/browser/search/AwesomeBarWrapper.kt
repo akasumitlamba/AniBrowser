@@ -39,7 +39,7 @@ constructor(
     @Composable
     @Suppress("MagicNumber")
     override fun Content() {
-        if (providers.value.isEmpty()) {
+        if (providers.value.isEmpty() || text.value.isBlank()) {
             return
         }
 
@@ -50,9 +50,9 @@ constructor(
             orientation = AwesomeBarOrientation.BOTTOM,
             colors =
                 AwesomeBarDefaults.colors(
-                    background = Color(0xff222222),
+                    background = Color.Transparent,
                     title = Color(0xffffffff),
-                    description = Color(0xffdddddd),
+                    description = Color(0xffc5d8e8),
                     autocompleteIcon = Color(0xffdddddd),
                 ),
             onSuggestionClicked = { suggestion ->
@@ -61,6 +61,12 @@ constructor(
             },
             onAutoComplete = { suggestion ->
                 onEditSuggestionListener?.invoke(suggestion.editSuggestion!!)
+            },
+            onVisibilityStateUpdated = { state ->
+                post {
+                    background = if (state.visibleProviderGroups.values.any { it.isNotEmpty() })
+                        context.getDrawable(org.mozilla.reference.browser.R.drawable.ani_glass_surface) else null
+                }
             },
             onScroll = { hideKeyboard() },
             onRemoveClicked = {
@@ -82,6 +88,7 @@ constructor(
     override fun onInputChanged(text: String) {
         hiddenSuggestions.value = emptySet()
         this.text.value = text
+        background = null
     }
 
     override fun removeAllProviders() {

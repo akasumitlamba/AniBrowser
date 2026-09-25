@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <!-- This Source Code Form is subject to the terms of the Mozilla Public
    - License, v. 2.0. If a copy of the MPL was not distributed with this
    - file, You can obtain one at http://mozilla.org/MPL/2.0/. -->
@@ -8,7 +8,7 @@
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:minHeight="56dp"
+    android:minHeight="52dp"
     android:orientation="vertical">
 
     <!-- Navigation -->
@@ -140,9 +140,9 @@
 
     <mozilla.components.browser.menu.view.MenuButton
         android:id="@+id/mozac_browser_toolbar_menu"
-        android:layout_width="@dimen/mozac_browser_toolbar_button_width"
+        android:layout_width="48dp"
         android:layout_height="@dimen/mozac_browser_toolbar_button_height"
-        android:background="?android:attr/selectableItemBackgroundBorderless"
+        android:background="@drawable/ani_button_ripple"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintTop_toTopOf="@+id/mozac_browser_toolbar_background"
         app:layout_constraintBottom_toBottomOf="@+id/mozac_browser_toolbar_background" />
@@ -153,10 +153,14 @@
         android:id="@+id/mozac_browser_toolbar_progress"
         style="?android:attr/progressBarStyleHorizontal"
         android:layout_width="0dp"
-        android:layout_height="@dimen/mozac_browser_toolbar_progress_bar_height"
+        android:layout_height="3dp"
+        android:layout_marginHorizontal="18dp"
+        android:layout_marginBottom="2dp"
+        android:progressDrawable="@drawable/ani_progress_drawable"
+        android:indeterminateTint="#8B5CF6"
         android:visibility="gone"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent" />
+        app:layout_constraintBottom_toBottomOf="@id/mozac_browser_toolbar_background"
+        app:layout_constraintEnd_toEndOf="@id/mozac_browser_toolbar_background"
+        app:layout_constraintStart_toStartOf="@id/mozac_browser_toolbar_background" />
 
 </mozilla.components.browser.toolbar.display.DisplayToolbarView>

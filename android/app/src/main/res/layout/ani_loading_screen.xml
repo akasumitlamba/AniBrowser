@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/siteLoadingScreen"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#0C1420"
+    android:gravity="center"
+    android:orientation="vertical"
+    android:padding="24dp"
+    android:clickable="true">
+
+    <ImageView
+        android:id="@+id/siteLoadingLogo"
+        android:layout_width="64dp"
+        android:layout_height="64dp"
+        android:src="@drawable/ani_logo"
+        android:importantForAccessibility="no" />
+
+    <TextView
+        android:id="@+id/siteLoadingLabel"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="20dp"
+        android:text="@string/ani_opening_app"
+        android:textColor="#DCE9F0"
+        android:textSize="16sp" />
+
+    <ProgressBar
+        android:id="@+id/siteLoadingProgress"
+        style="?android:attr/progressBarStyleHorizontal"
+        android:layout_width="160dp"
+        android:layout_height="4dp"
+        android:layout_marginTop="20dp"
+        android:indeterminate="true"
+        android:progressDrawable="@drawable/ani_progress_drawable"
+        android:indeterminateTint="#8B5CF6"
+        android:max="100" />
+</LinearLayout>

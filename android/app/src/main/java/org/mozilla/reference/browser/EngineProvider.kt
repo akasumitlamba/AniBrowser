@@ -28,6 +28,7 @@ object EngineProvider {
             // About config it's no longer enabled by default
             builder.aboutConfigEnabled(true)
             builder.extensionsWebAPIEnabled(true)
+            org.mozilla.reference.browser.ani.DnsPreferences.configure(context, builder)
             runtime = GeckoRuntime.create(context, builder.build())
             org.mozilla.reference.browser.ani.PlaybackController.install(context.applicationContext, runtime!!)
         }
@@ -44,6 +45,11 @@ object EngineProvider {
         return GeckoEngine(context, defaultSettings, runtime).also {
             WebCompatFeature.install(it)
         }
+    }
+
+    @Synchronized
+    fun updateDnsSettings(context: Context) {
+        runtime?.let { org.mozilla.reference.browser.ani.DnsPreferences.apply(context, it.settings) }
     }
 
     fun createClient(context: Context): Client {

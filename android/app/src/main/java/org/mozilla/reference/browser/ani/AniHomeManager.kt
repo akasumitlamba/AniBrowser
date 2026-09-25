@@ -139,6 +139,7 @@ object AniHomeManager {
         file.writeText(array.toString(2))
     }
 
+    @Synchronized
     fun addManualTile(context: Context, rawUrl: String, rawTitle: String?, onComplete: ((AniHomeTile) -> Unit)? = null) {
         val url = normalizeUrl(rawUrl)
         val title = if (!rawTitle.isNullOrBlank()) rawTitle.trim() else smartTitle(url)
@@ -166,6 +167,7 @@ object AniHomeManager {
         }
     }
 
+    @Synchronized
     fun addFromSession(context: Context, rawUrl: String, rawTitle: String?, sessionIcon: Bitmap?) {
         val url = normalizeUrl(rawUrl)
         val title = if (!rawTitle.isNullOrBlank() && rawTitle != "about:blank" && rawTitle != "about:home") {
@@ -205,14 +207,15 @@ object AniHomeManager {
         }
     }
 
-    fun updateTileTitle(context: Context, id: String, newTitle: String) {
+    @Synchronized
+    fun updateTileTitle(context: Context, id: String, newTitle: String, notify: Boolean = true) {
         if (newTitle.isBlank()) return
         val tiles = getTiles(context).toMutableList()
         val index = tiles.indexOfFirst { it.id == id }
         if (index >= 0) {
             tiles[index] = tiles[index].copy(title = newTitle.trim())
             saveTiles(context, tiles)
-            onTilesChanged?.invoke()
+            if (notify) onTilesChanged?.invoke()
         }
     }
 
@@ -247,6 +250,7 @@ object AniHomeManager {
         return destFile.absolutePath
     }
 
+    @Synchronized
     fun removeTile(context: Context, id: String, notify: Boolean = true) {
         val current = getTiles(context).toMutableList()
         val removed = current.removeAll { it.id == id }
@@ -259,13 +263,13 @@ object AniHomeManager {
     }
 
     @Synchronized
-    private fun updateTileIcon(context: Context, id: String, localPath: String) {
+    private fun updateTileIcon(context: Context, id: String, localPath: String, notify: Boolean = true) {
         val tiles = getTiles(context).toMutableList()
         val index = tiles.indexOfFirst { it.id == id }
         if (index >= 0) {
             tiles[index] = tiles[index].copy(iconPath = localPath)
             saveTiles(context, tiles)
-            onTilesChanged?.invoke()
+            if (notify) onTilesChanged?.invoke()
         }
     }
 
@@ -358,9 +362,11 @@ object AniHomeManager {
         )
 
         for (candidate in candidateUrls) {
+            var connection: HttpURLConnection? = null
             try {
                 val urlObj = URL(candidate)
                 val conn = urlObj.openConnection() as HttpURLConnection
+                connection = conn
                 conn.connectTimeout = 4000
                 conn.readTimeout = 4000
                 conn.instanceFollowRedirects = true
@@ -392,7 +398,11 @@ object AniHomeManager {
                         }
                     }
                 }
-            } catch (_: Exception) {}
+            } catch (_: Exception) {
+                // Try the next logo candidate.
+            } finally {
+                connection?.disconnect()
+            }
         }
         null
     }
@@ -425,13 +435,16 @@ object AniHomeManager {
         }
     }
 
-    fun refreshLogos(context: Context) {
+    fun refreshLogos(context: Context, complete: (Int) -> Unit = {}) {
         val app = context.applicationContext
         scope.launch {
-            getTiles(app).forEach { tile ->
-                val path = downloadAndSaveLogoOrIcon(app, tile.id, tile.url)
-                if (path != null) updateTileIcon(app, tile.id, path)
-            }
+            var refreshed = 0
+            try {
+                getTiles(app).forEach { tile ->
+                    val path = downloadAndSaveLogoOrIcon(app, tile.id, tile.url)
+                    if (path != null) { updateTileIcon(app, tile.id, path, notify = false); refreshed++ }
+                }
+            } finally { withContext(Dispatchers.Main) { complete(refreshed) } }
         }
     }
 

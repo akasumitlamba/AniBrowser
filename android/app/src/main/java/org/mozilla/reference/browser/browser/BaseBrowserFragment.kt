@@ -20,7 +20,7 @@ import androidx.coordinatorlayout.widget.CoordinatorLayout
 import androidx.fragment.app.Fragment
 import androidx.preference.PreferenceManager
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
-import mozilla.components.browser.state.selector.selectedTab
+import mozilla.components.browser.state.selector.findTabOrCustomTabOrSelectedTab
 import mozilla.components.browser.toolbar.BrowserToolbar
 import mozilla.components.compose.browser.toolbar.BrowserToolbar
 import mozilla.components.concept.engine.EngineView
@@ -203,7 +203,7 @@ abstract class BaseBrowserFragment : Fragment(), UserInteractionHandler, Activit
                 )
         }
 
-        toolbarIntegration.set(
+        if (activity !is org.mozilla.reference.browser.ani.WebsiteActivity) toolbarIntegration.set(
             feature =
                 ToolbarIntegration(
                     requireContext(),
@@ -234,6 +234,7 @@ abstract class BaseBrowserFragment : Fragment(), UserInteractionHandler, Activit
             owner = this,
             view = view,
         )
+
         shareResourceFeature.set(
             ShareResourceFeature(
                 context = requireContext().applicationContext,
@@ -256,7 +257,7 @@ abstract class BaseBrowserFragment : Fragment(), UserInteractionHandler, Activit
                         DefaultDownloadFileUtils(
                             context = requireContext().applicationContext,
                             downloadLocation = {
-                                Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS).path
+                                org.mozilla.reference.browser.downloads.DownloadLocation.get(requireContext().applicationContext)
                             },
                         ),
                     downloadManager =
@@ -406,6 +407,7 @@ abstract class BaseBrowserFragment : Fragment(), UserInteractionHandler, Activit
                     requireComponents.core.store,
                     requireComponents.useCases.sessionUseCases.reload,
                     swipeRefresh,
+                    tabId = sessionId,
                 ),
             owner = this,
             view = view,
@@ -460,6 +462,7 @@ abstract class BaseBrowserFragment : Fragment(), UserInteractionHandler, Activit
     }
 
     private fun fullScreenChanged(enabled: Boolean) {
+        org.mozilla.reference.browser.ani.PlaybackController.setChromeInset(0)
         if (enabled || activity is org.mozilla.reference.browser.ani.WebsiteActivity) {
             activity?.enterImmersiveMode()
             toolbar.visibility = View.GONE
@@ -467,7 +470,22 @@ abstract class BaseBrowserFragment : Fragment(), UserInteractionHandler, Activit
         } else {
             activity?.exitImmersiveMode()
             toolbar.visibility = View.VISIBLE
-            engineView.setDynamicToolbarMaxHeight(resources.getDimensionPixelSize(R.dimen.browser_toolbar_height))
+            engineView.setDynamicToolbarMaxHeight(0)
+        }
+        updateBrowserViewport()
+    }
+
+    protected fun updateBrowserViewport() {
+        if (view == null) return
+        val reserve = if (toolbar.visibility == View.VISIBLE &&
+            activity !is org.mozilla.reference.browser.ani.WebsiteActivity && activity?.isInPictureInPictureMode != true) {
+            resources.getDimensionPixelSize(R.dimen.browser_toolbar_height) + (24 * resources.displayMetrics.density).toInt()
+        } else 0
+        (swipeRefresh.layoutParams as? CoordinatorLayout.LayoutParams)?.let { params ->
+            if (params.bottomMargin != reserve) {
+                params.bottomMargin = reserve
+                swipeRefresh.layoutParams = params
+            }
         }
     }
 
@@ -482,7 +500,11 @@ abstract class BaseBrowserFragment : Fragment(), UserInteractionHandler, Activit
     final override fun onHomePressed(): Boolean = pictureInPictureIntegration.get()?.onHomePressed() ?: false
 
     final override fun onPictureInPictureModeChanged(enabled: Boolean) {
-        val session = requireComponents.core.store.state.selectedTab
+        toolbar.visibility = if (enabled || activity is org.mozilla.reference.browser.ani.WebsiteActivity) View.GONE else View.VISIBLE
+        org.mozilla.reference.browser.ani.PlaybackController.setPictureInPicture(enabled)
+        org.mozilla.reference.browser.ani.PlaybackController.setChromeInset(0)
+        updateBrowserViewport()
+        val session = requireComponents.core.store.state.findTabOrCustomTabOrSelectedTab(sessionId)
         val fullScreenMode = session?.content?.fullScreen ?: false
         // If we're exiting PIP mode and we're in fullscreen mode, then we should exit fullscreen mode as well.
         if (!enabled && fullScreenMode) {

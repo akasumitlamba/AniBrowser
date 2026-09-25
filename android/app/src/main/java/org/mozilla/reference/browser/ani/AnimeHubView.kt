@@ -14,11 +14,16 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.FrameLayout
 import org.mozilla.reference.browser.settings.SettingsActivity
+import org.mozilla.reference.browser.ext.components
 import java.io.File
+import kotlinx.coroutines.MainScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 
 /**
- * Hosts AniHome only while it is visible. Destroying the system WebView when a site opens avoids
- * keeping Chromium alive beside GeckoView during normal browsing.
+ * Retains a paused Home briefly for quick returns, then releases Chromium so
+ * website playback has the memory budget on low-end devices.
  */
 class AnimeHubView @JvmOverloads constructor(
     context: Context,
@@ -26,10 +31,31 @@ class AnimeHubView @JvmOverloads constructor(
     defStyleAttr: Int = 0,
 ) : FrameLayout(context, attrs, defStyleAttr) {
     private var internalWebView: WebView? = null
+    private var wallpaperScope = MainScope()
+    private var wallpaperJob: Job? = null
+    private var contentDirty = false
+    private val releaseIdleHome = Runnable { if (visibility != VISIBLE) releaseContent(destroy = true) }
+    @Suppress("DEPRECATION", "OVERRIDE_DEPRECATION") // Android 10 devices still deliver these memory signals.
+    private val memoryCallbacks = object : android.content.ComponentCallbacks2 {
+        override fun onConfigurationChanged(configuration: android.content.res.Configuration) = Unit
+        override fun onLowMemory() { if (visibility != VISIBLE) releaseContent(destroy = true) }
+        override fun onTrimMemory(level: Int) {
+            if (level >= android.content.ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW && visibility != VISIBLE)
+                releaseContent(destroy = true)
+        }
+    }
     var onOpenUrl: ((String) -> Unit)? = null
+    var onContentReady: (() -> Unit)? = null
+    var contentReady = false
+        private set
 
     inner class AniHomeBridge {
-        @JavascriptInterface fun refreshLogos() { AniHomeManager.refreshLogos(context) }
+        @JavascriptInterface fun refreshLogos() = post {
+            val original = internalWebView
+            AniHomeManager.refreshLogos(context) { count ->
+                if (internalWebView === original) original?.evaluateJavascript("window.finishRefresh && finishRefresh($count)", null)
+            }
+        }
         @JavascriptInterface fun searchUrl(query: String) = BrowserPreferences.searchUrl(context, query)
         @JavascriptInterface fun openUrl(url: String) = post {
             if (url == "anibrowser://settings") openSettings() else onOpenUrl?.invoke(url)
@@ -57,7 +83,7 @@ class AnimeHubView @JvmOverloads constructor(
         }
 
         @JavascriptInterface fun updateTile(id: String, title: String) = post {
-            AniHomeManager.updateTileTitle(context, id, title)
+            AniHomeManager.updateTileTitle(context, id, title, notify = false)
         }
 
         @JavascriptInterface fun deleteTile(id: String) = post {
@@ -82,6 +108,12 @@ class AnimeHubView @JvmOverloads constructor(
             overScrollMode = OVER_SCROLL_NEVER
             addJavascriptInterface(AniHomeBridge(), "AniHomeBridge")
             webViewClient = object : WebViewClient() {
+                override fun onPageFinished(view: WebView?, url: String?) {
+                    contentReady = true
+                    onContentReady?.invoke()
+                    updateWallpaper()
+                }
+
                 override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
                     val url = request?.url?.toString() ?: return false
                     if (url.startsWith("http://") || url.startsWith("https://")) {
@@ -99,6 +131,9 @@ class AnimeHubView @JvmOverloads constructor(
                             WebResourceResponse("image/png", null, context.assets.open("anibrowser_logo_160.png"))
                         }.getOrNull()
                         uri.path?.startsWith("/icon/") == true -> iconResponse(uri)
+                        uri.path?.startsWith("/wallpaper/") == true -> DailyWallpaper.file(context)?.let { file ->
+                            runCatching { WebResourceResponse("image/jpeg", null, file.inputStream()) }.getOrNull()
+                        }
                         else -> null
                     }
                 }
@@ -119,20 +154,86 @@ class AnimeHubView @JvmOverloads constructor(
 
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
-        AniHomeManager.onTilesChanged = { post { if (visibility == VISIBLE) loadContent() } }
+        wallpaperScope.cancel()
+        wallpaperScope = MainScope()
+        context.applicationContext.registerComponentCallbacks(memoryCallbacks)
+        AniHomeManager.onTilesChanged = { post {
+            contentDirty = true
+            if (visibility == VISIBLE) loadContent(forceReload = true)
+        } }
     }
 
     override fun onDetachedFromWindow() {
+        removeCallbacks(wallpaperCheck)
         AniHomeManager.onTilesChanged = null
-        releaseContent()
+        context.applicationContext.unregisterComponentCallbacks(memoryCallbacks)
+        removeCallbacks(releaseIdleHome)
+        wallpaperScope.cancel()
+        releaseContent(destroy = true)
         super.onDetachedFromWindow()
     }
 
-    fun loadContent() {
-        ensureWebView().loadDataWithBaseURL("https://$LOCAL_HOST/", AnimeHub.getHtml(context), "text/html", "UTF-8", null)
+    private val wallpaperCheck = object : Runnable {
+        override fun run() {
+            val state = context.components.core.store.state
+            if (internalWebView != null && windowVisibility == VISIBLE && visibility == VISIBLE &&
+                state.tabs.none { it.content.loading } && state.customTabs.none { it.content.loading }) {
+                if (wallpaperJob?.isActive != true) {
+                    wallpaperJob = wallpaperScope.launch {
+                        DailyWallpaper.refresh(context.applicationContext) {
+                            val current = context.components.core.store.state
+                            current.tabs.none { it.content.loading } && current.customTabs.none { it.content.loading }
+                        }
+                        updateWallpaper()
+                    }
+                }
+            }
+            if (internalWebView != null) postDelayed(this, 60_000L)
+        }
+    }
+    override fun onWindowVisibilityChanged(visibility: Int) {
+        super.onWindowVisibilityChanged(visibility)
+        removeCallbacks(wallpaperCheck)
+        if (visibility == VISIBLE && internalWebView != null) postDelayed(wallpaperCheck, 8000L)
+    }
+    private fun updateWallpaper() {
+        internalWebView?.evaluateJavascript("window.setWallpaper && window.setWallpaper(${DailyWallpaper.state(context)})", null)
     }
 
-    fun releaseContent() {
+    fun loadContent(forceReload: Boolean = false) {
+        removeCallbacks(releaseIdleHome)
+        removeCallbacks(wallpaperCheck)
+        postDelayed(wallpaperCheck, 8000L)
+        val wv = internalWebView
+        if (!forceReload && !contentDirty && wv != null && contentReady) {
+            wv.onResume()
+            wv.visibility = VISIBLE
+            onContentReady?.invoke()
+            return
+        }
+        contentReady = false
+        contentDirty = false
+        val view = ensureWebView()
+        view.visibility = VISIBLE
+        view.onResume()
+        view.loadDataWithBaseURL("https://$LOCAL_HOST/", AnimeHub.getHtml(context), "text/html", "UTF-8", null)
+    }
+
+    fun releaseContent(destroy: Boolean = false) {
+        removeCallbacks(releaseIdleHome)
+        if (!destroy) {
+            removeCallbacks(wallpaperCheck)
+            wallpaperJob?.cancel()
+            wallpaperJob = null
+            internalWebView?.onPause()
+            internalWebView?.visibility = GONE
+            postDelayed(releaseIdleHome, 30_000L)
+            return
+        }
+        contentReady = false
+        removeCallbacks(wallpaperCheck)
+        wallpaperJob?.cancel()
+        wallpaperJob = null
         internalWebView?.let {
             it.stopLoading()
             it.removeJavascriptInterface("AniHomeBridge")

@@ -18,13 +18,13 @@ import org.mozilla.reference.browser.ext.getPreferenceKey
 /** Component group which encapsulates foreground-friendly services. */
 class Services(
     private val context: Context,
-    private val accountManager: FxaAccountManager,
+    private val accountManager: () -> FxaAccountManager,
     private val tabsUseCases: TabsUseCases,
 ) {
     private val prefs = PreferenceManager.getDefaultSharedPreferences(context)
     val accountsAuthFeature by lazy {
         FirefoxAccountsAuthFeature(
-            accountManager,
+            accountManager(),
             redirectUrl = BackgroundServices.REDIRECT_URL,
         ) { _, authUrl ->
             MainScope().launch {

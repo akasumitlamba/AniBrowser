@@ -2,7 +2,7 @@
 <!-- This Source Code Form is subject to the terms of the Mozilla Public
    - License, v. 2.0. If a copy of the MPL was not distributed with this
    - file, You can obtain one at http://mozilla.org/MPL/2.0/. -->
-<androidx.coordinatorlayout.widget.CoordinatorLayout
+<org.mozilla.reference.browser.ani.BrowserRootLayout
     xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:mozac="http://schemas.android.com/apk/res-auto"
@@ -34,13 +34,20 @@
         android:id="@+id/animeHubView"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:layout_marginBottom="@dimen/browser_toolbar_height"
         android:visibility="gone" />
+
+    <include layout="@layout/ani_loading_screen" />
 
     <org.mozilla.reference.browser.search.AwesomeBarWrapper
         android:id="@+id/awesomeBar"
         android:layout_width="match_parent"
-        android:layout_height="match_parent"
+        android:layout_height="168dp"
+        android:layout_gravity="bottom"
+        android:layout_marginHorizontal="12dp"
+        android:layout_marginBottom="80dp"
+        android:background="@android:color/transparent"
+        android:clipToOutline="true"
+        android:elevation="14dp"
         android:padding="4dp"
         android:visibility="gone" />
 
@@ -49,11 +56,11 @@
         android:layout_width="match_parent"
         android:layout_height="56dp"
         android:layout_gravity="bottom"
-        android:background="#000000"
+        android:background="@drawable/ani_glass_surface"
         mozac:findInPageQueryTextColor="#ffffff"
         mozac:findInPageQueryHintTextColor="#dddddd"
-        mozac:findInPageResultCountTextColor="#ff88ff"
-        mozac:findInPageButtonsTint="#ff88ff"
+        mozac:findInPageResultCountTextColor="#9ACFFF"
+        mozac:findInPageButtonsTint="#9ACFFF"
         android:visibility="gone"
         app:layout_behavior="org.mozilla.reference.browser.browser.FindInPageBarBehavior" />
 
@@ -62,7 +69,10 @@
         android:layout_width="match_parent"
         android:layout_height="@dimen/browser_toolbar_height"
         android:layout_gravity="bottom"
-        android:background="@color/toolbarBackgroundColor" />
+        android:background="@drawable/ani_floating_glass"
+        android:layout_marginHorizontal="12dp"
+        android:layout_marginBottom="12dp"
+        android:elevation="12dp" />
 
     <mozilla.components.feature.readerview.view.ReaderViewControlsBar
         android:id="@+id/readerViewBar"
@@ -86,4 +96,4 @@
         android:layout_marginBottom="16dp"
         app:layout_behavior="org.mozilla.reference.browser.browser.ReaderViewAppearanceButtonBehavior" />
 
-</androidx.coordinatorlayout.widget.CoordinatorLayout>
+</org.mozilla.reference.browser.ani.BrowserRootLayout>

@@ -6,18 +6,32 @@ import androidx.appcompat.app.AlertDialog
 import org.json.JSONObject
 import org.mozilla.geckoview.GeckoRuntime
 import org.mozilla.geckoview.WebExtension
-import java.util.WeakHashMap
-import mozilla.components.concept.engine.EngineSession
 
 object PlaybackController {
     var isReady = false
         private set
+    private var chromeInset = 0
+    fun setChromeInset(value: Int) {
+        val next = value.coerceIn(0, 120)
+        if (chromeInset == next) return
+        chromeInset = next
+        ports.toList().forEach { it.postMessage(JSONObject().put("type", "chromeInset").put("bottom", chromeInset)) }
+    }
+    fun publishMediaPreferences(context: Context) {
+        val state = MediaPreferences.state(context)
+        ports.toList().forEach { it.postMessage(state) }
+    }
+    fun appVisibility(background: Boolean) {
+        ports.toList().forEach { it.postMessage(JSONObject().put("type", "appVisibility").put("background", background)) }
+    }
+    fun mediaCommand(command: String) {
+        ports.toList().forEach { it.postMessage(JSONObject().put("type", "mediaCommand").put("command", command)) }
+    }
+    fun setPictureInPicture(enabled: Boolean) {
+        ports.toList().forEach { it.postMessage(JSONObject().put("type", "pipPresentation").put("enabled", enabled)) }
+    }
     private val rates = listOf(1.0, 1.25, 1.5, 1.75, 2.0)
     private val ports = mutableSetOf<WebExtension.Port>()
-    private val startupLoads = WeakHashMap<EngineSession, String>()
-    fun loadWhenReady(session: EngineSession, url: String) {
-        startupLoads[session] = url
-    }
     private fun prefs(context: Context) = context.getSharedPreferences("anibrowser", Context.MODE_PRIVATE)
     private fun speed(context: Context) = prefs(context).getFloat("speed", 1f).toDouble()
 
@@ -49,9 +63,8 @@ object PlaybackController {
                         }
                     })
                     port.postMessage(JSONObject().put("speed", speed(context)))
-                    val queued = startupLoads.entries.map { it.key to it.value }
-                    startupLoads.clear()
-                    queued.forEach { (session, url) -> session.loadUrl(url) }
+                    port.postMessage(JSONObject().put("type", "chromeInset").put("bottom", chromeInset))
+                    port.postMessage(MediaPreferences.state(context))
                 }
             }, "anibrowser")
         }, { android.util.Log.e("AniBrowser", "Built-in playback controller failed to install") })

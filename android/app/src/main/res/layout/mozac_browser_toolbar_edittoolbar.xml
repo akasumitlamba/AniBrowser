@@ -10,7 +10,7 @@
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:orientation="vertical"
-    android:layout_height="56dp">
+    android:layout_height="52dp">
 
     <ImageView
         android:id="@+id/mozac_browser_toolbar_background"

@@ -64,7 +64,7 @@ class Components(
             applicationScope,
         )
     }
-    val services by lazy { Services(context, backgroundServices.accountManager, useCases.tabsUseCases) }
+    val services by lazy { Services(context, { backgroundServices.accountManager }, useCases.tabsUseCases) }
     val push by lazy { Push(context, analytics.crashReporter) }
 
     @delegate:SuppressLint("NewApi")
