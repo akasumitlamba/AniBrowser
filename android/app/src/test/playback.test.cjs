@@ -8,7 +8,7 @@ const code = fs.readFileSync(path.join(__dirname, '../main/assets/extensions/ani
 
 async function fixture(saved = 1.5) {
   const videos = [];
-  let update, tick;
+  let update, tick; let starts=0,stops=0;
   const documentEvents={};
   class Document {get hidden(){return false;}}
   const document=Object.assign(new Document(),{querySelectorAll:()=>videos,addEventListener:(name,listener)=>documentEvents[name]=listener});
@@ -18,7 +18,7 @@ async function fixture(saved = 1.5) {
       sendMessage: async () => ({speed: saved})}},
     MutationObserver: class {constructor() { throw new Error('Playback must not scan DOM mutations'); }},
     queueMicrotask, performance, WeakSet, WeakMap, setTimeout,
-    setInterval: callback => { tick = callback; return 1; }, clearInterval(){},
+    setInterval: callback => { starts++; tick = callback; return 1; }, clearInterval(){stops++;},
   };
   function add() {
     const listeners = {};
@@ -31,7 +31,7 @@ async function fixture(saved = 1.5) {
   const first = add();
   vm.runInNewContext(code, context);
   await new Promise(setImmediate);
-  return {first, add, update: value => update({speed: value}), discover:media=>documentEvents.loadedmetadata({target:media}), tick: () => tick()};
+  return {first, add, update: value => update({speed: value}), discover:media=>documentEvents.loadedmetadata({target:media}), tick: () => tick(), event:(name,media)=>documentEvents[name]({target:media}), timers:()=>({starts,stops})};
 }
 
 test('restores the saved rate and preserves pitch on initial playback', async () => {
@@ -90,4 +90,16 @@ test('late startup replies never overwrite newer playback or background settings
   replies.speed({speed:1.25});replies.mediaPolicy({type:'mediaPolicy',enabled:false,background:true});
   await new Promise(setImmediate);
   assert.equal(media.playbackRate,2);assert.equal(media.paused,false);assert.equal(document.hidden,false);
+});
+
+test('paused and ended players stop recovery wakeups; resuming restarts one timer',async()=>{
+  const f=await fixture();assert.equal(f.timers().starts,1);
+  f.first.paused=true;f.event('pause',f.first);assert.equal(f.timers().stops,1);
+  f.event('pause',f.first);assert.equal(f.timers().stops,1);
+  f.first.paused=false;f.event('playing',f.first);assert.equal(f.timers().starts,2);
+  f.event('playing',f.first);assert.equal(f.timers().starts,2);
+  f.first.ended=true;f.event('ended',f.first);assert.equal(f.timers().stops,2);
+});
+test('detached players release their recovery timer on the next tick',async()=>{
+  const f=await fixture();f.first.isConnected=false;f.tick();assert.equal(f.timers().stops,1);
 });

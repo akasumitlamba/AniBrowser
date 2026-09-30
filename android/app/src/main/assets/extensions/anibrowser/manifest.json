@@ -1,7 +1,7 @@
 {
   "manifest_version": 2,
   "name": "AniBrowser Playback",
-  "version": "0.3.3",
+  "version": "0.3.4",
   "browser_specific_settings": {
     "gecko": {
       "id": "playback@anibrowser.local"

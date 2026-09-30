@@ -31,9 +31,21 @@
   }
   function selected() {
     prune();
-    return [...media].find(item => !item.paused && !item.ended) || [...media].find(item => item.tagName === "VIDEO") || [...media][0];
+    let first, video;
+    for (const item of media) {
+      if (!item.paused && !item.ended) return item;
+      if (!first) first = item;
+      if (!video && item.tagName === "VIDEO") video = item;
+    }
+    return video || first;
   }
+  let announcementPending = false;
   function announce() {
+    if (announcementPending) return;
+    announcementPending = true;
+    queueMicrotask(() => { announcementPending = false; reportState(); });
+  }
+  function reportState() {
     const item = selected();
     const rect = item?.getBoundingClientRect?.();
     browser.runtime.sendMessage({type: "mediaState", hasMedia: !!item,

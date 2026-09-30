@@ -55,6 +55,7 @@
     appInBackground = message.background === true;
     pauseMedia();
     updateVisibility();
+    syncRecovery();
   }
   for (const event of ["visibilitychange", "webkitvisibilitychange"]) document.addEventListener(event, stopVisibility, true);
   browser.runtime.sendMessage({type:"mediaPolicy"}).then(message => {
@@ -88,13 +89,26 @@
       });
     }
     apply(media);
-    if (recoveryTimer === null) recoveryTimer = setInterval(() => {
+    syncRecovery();
+  }
+  function syncRecovery() {
+    let playing = false;
+    for (const element of mediaElements) {
+      if (!element.isConnected) mediaElements.delete(element);
+      else if (!element.paused && !element.ended) playing = true;
+    }
+    if (!playing) {
+      if (recoveryTimer !== null) clearInterval(recoveryTimer);
+      recoveryTimer = null;
+      return;
+    }
+    if (recoveryTimer !== null) return;
+    recoveryTimer = setInterval(() => {
       for (const element of mediaElements) {
-        if (!element.isConnected) mediaElements.delete(element);
-        else if (!element.paused) apply(element);
+        if (element.isConnected && !element.paused && !element.ended) apply(element);
       }
       updateVisibility();
-      if (!mediaElements.size) { clearInterval(recoveryTimer); recoveryTimer = null; }
+      syncRecovery();
     }, 5000);
   }
   function scan() {

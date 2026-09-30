@@ -15,7 +15,7 @@ function harness(initial=1.5, elements=[player()]) {
   let messages;
   const document = {hidden:false,fullscreenElement:null,
     addEventListener(name,fn){(listeners[name]??=[]).push(fn);},querySelectorAll(){return elements;}};
-  vm.runInNewContext(source,{document,performance:{now:()=>1000},browser:{runtime:{
+  vm.runInNewContext(source,{document,queueMicrotask,performance:{now:()=>1000},browser:{runtime:{
     onMessage:{addListener(fn){messages=fn;}},sendMessage(message){sent.push(message);return Promise.resolve({type:'settings',speed:initial});}
   }}});
   return {elements,document,sent,event(name,target){for(const fn of listeners[name]||[]) fn({target});},message(m){messages(m);}};
@@ -107,4 +107,15 @@ test('transport commands target the playing embedded frame rather than every pla
   h.receive({type:'command',command:'toggle'});await tick();
   assert.equal(h.broadcasts.length,1);assert.equal(h.broadcasts[0].options.frameId,3);
   h.receive({type:'command',command:'pause'});await tick();assert.equal(h.broadcasts[1].options,undefined);
+});
+
+test('media event bursts measure player layout and report state only once',async()=>{
+  const h=harness();await tick();let reads=0;
+  h.elements[0].getBoundingClientRect=()=>{reads++;return null;};
+  const before=h.sent.filter(m=>m.type==='mediaState').length;
+  h.event('play',h.elements[0]);h.event('playing',h.elements[0]);h.event('loadedmetadata',h.elements[0]);
+  await tick();
+  assert.equal(reads,1);assert.equal(h.sent.filter(m=>m.type==='mediaState').length-before,1);
+  h.elements[0].paused=true;h.event('pause',h.elements[0]);await tick();
+  assert.equal(h.sent.filter(m=>m.type==='mediaState').at(-1).playing,false);
 });
