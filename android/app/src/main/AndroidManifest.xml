@@ -203,6 +203,12 @@
             </intent-filter>
         </service>
 
+        <receiver android:name=".ani.ShortcutIconRefreshReceiver" android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
+
         <service android:name=".media.MediaSessionService"
             android:foregroundServiceType="mediaPlayback"
             android:exported="false" />

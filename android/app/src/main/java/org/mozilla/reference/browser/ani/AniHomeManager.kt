@@ -348,6 +348,21 @@ object AniHomeManager {
         }
     }
 
+    /** Share real cached/bundled site artwork with Android's pinned shortcuts. */
+    suspend fun shortcutBitmap(context: Context, siteUrl: String): Bitmap? = withContext(Dispatchers.IO) {
+        val host = Uri.parse(siteUrl).host?.lowercase(Locale.ROOT) ?: return@withContext null
+        val id = "shortcut-" + java.security.MessageDigest.getInstance("SHA-256")
+            .digest(host.toByteArray()).joinToString("") { "%02x".format(it) }
+        val cached = File(getIconsDir(context), "$id.png")
+        BitmapFactory.decodeFile(cached.absolutePath)?.let { return@withContext it }
+        // Match hostnames, not arbitrary URL substrings such as query parameters.
+        val bundled = mapOf("youtube.com" to "youtube.png", "crunchyroll.com" to "crunchyroll.png")
+            .entries.firstOrNull { host == it.key || host.endsWith("." + it.key) }?.value
+        val path = if (bundled != null) copyBundledIcon(context, bundled, id)
+            else downloadAndSaveLogoOrIcon(context, id, siteUrl)
+        path?.let { BitmapFactory.decodeFile(it) }
+    }
+
     private suspend fun downloadAndSaveLogoOrIcon(context: Context, id: String, siteUrl: String): String? = withContext(Dispatchers.IO) {
         val host = try {
             Uri.parse(siteUrl).host?.removePrefix("www.")

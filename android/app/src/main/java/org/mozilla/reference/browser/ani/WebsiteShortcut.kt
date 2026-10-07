@@ -14,8 +14,6 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import mozilla.components.browser.icons.BrowserIcons
-import mozilla.components.browser.icons.IconRequest
 import java.security.MessageDigest
 import org.mozilla.reference.browser.BrowserActivity
 import org.mozilla.reference.browser.R
@@ -23,6 +21,59 @@ import org.mozilla.reference.browser.browser.BrowserFragment
 import org.mozilla.reference.browser.ext.components
 
 object WebsiteShortcut {
+    private fun launcherIcon(context: Context, bitmap: Bitmap?): IconCompat {
+        if (bitmap == null) return IconCompat.createWithResource(context, R.mipmap.ic_launcher)
+        val icon = Bitmap.createBitmap(192, 192, Bitmap.Config.ARGB_8888)
+        val canvas = android.graphics.Canvas(icon)
+        canvas.drawColor(android.graphics.Color.rgb(3, 5, 30))
+        val scale = 128f / maxOf(bitmap.width, bitmap.height)
+        val width = bitmap.width * scale
+        val height = bitmap.height * scale
+        canvas.drawBitmap(bitmap, null, android.graphics.RectF(
+            (192 - width) / 2, (192 - height) / 2, (192 + width) / 2, (192 + height) / 2,
+        ), android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG or android.graphics.Paint.FILTER_BITMAP_FLAG))
+        return IconCompat.createWithAdaptiveBitmap(icon)
+    }
+
+    /** Replace old generated-letter icons in place without duplicating or re-pinning shortcuts. */
+    suspend fun refreshPinned(context: Context): Boolean {
+        val manager = context.getSystemService(android.content.pm.ShortcutManager::class.java)
+        val shortcuts = manager.pinnedShortcuts
+        android.util.Log.i("AniShortcutIcons", "Refreshing ${shortcuts.size} pinned shortcuts")
+        val preferences = context.getSharedPreferences("website_shortcuts", Context.MODE_PRIVATE)
+        var complete = true
+        for (shortcut in shortcuts) {
+            val registeredUrl = preferences.getString(shortcut.id, null)
+            // Launcher entries can survive app-data restoration without our URL registry.
+            // Recognize artwork only; never invent or overwrite their launch destination.
+            val label = shortcut.shortLabel?.toString().orEmpty()
+            val url = registeredUrl ?: when {
+                label.startsWith("Crunchyroll:") -> "https://www.crunchyroll.com"
+                label.startsWith("Home - Anikoto -") -> "https://anikototv.to/home"
+                else -> null
+            }
+            if (url == null) {
+                android.util.Log.w("AniShortcutIcons", "Pinned shortcut has no registered destination")
+                complete = false
+                continue
+            }
+            val isHome = url == "about:home" || url == "about:blank"
+            val bitmap = if (isHome) null else AniHomeManager.shortcutBitmap(context, url)
+            // A blocked/offline icon host must not leave the stale generated letter.
+            // Show the browser artwork now and retry the site's artwork later.
+            if (!isHome && bitmap == null) complete = false
+            val updated = android.content.pm.ShortcutInfo.Builder(context, shortcut.id)
+                .setShortLabel(shortcut.shortLabel ?: "AniBrowser")
+                .setIcon(launcherIcon(context, bitmap).toIcon(context))
+                .build()
+            val updatedSuccessfully = manager.updateShortcuts(listOf(updated))
+            android.util.Log.i("AniShortcutIcons", "Icon update accepted: $updatedSuccessfully")
+            if (!updatedSuccessfully) complete = false
+            bitmap?.recycle()
+        }
+        return complete
+    }
+
     /**
      * Pin a shortcut for [url] to the launcher.
      * Attempts to fetch the site favicon first; falls back to the app icon if unavailable.
@@ -47,19 +98,12 @@ object WebsiteShortcut {
         // Try to fetch the favicon asynchronously and create the shortcut with it.
         CoroutineScope(Dispatchers.IO).launch {
             val bitmap: Bitmap? = if (isHome) null else try {
-                val icons = context.components.core.icons
-                val result = icons.loadIcon(IconRequest(url = url, size = IconRequest.Size.LAUNCHER))
-                    .await()
-                result.bitmap
+                AniHomeManager.shortcutBitmap(context, url)
             } catch (_: Exception) { null }
 
             withContext(Dispatchers.Main) {
-                val icon = if (bitmap != null) {
-                    // Use the fetched favicon as the shortcut icon
-                    IconCompat.createWithBitmap(bitmap)
-                } else {
-                    IconCompat.createWithResource(context, R.mipmap.ic_launcher)
-                }
+                val icon = launcherIcon(context, bitmap)
+                bitmap?.recycle()
 
                 val shortcut = ShortcutInfoCompat.Builder(context, id)
                     .setShortLabel((if (isHome) "AniHome" else title.ifBlank { uri.host.orEmpty() }).take(40))
