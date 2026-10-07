@@ -61,14 +61,25 @@
   browser.runtime.sendMessage({type:"mediaPolicy"}).then(message => {
     if (!policyReceived) setMediaPolicy(message);
   }).catch(()=>{});
+  function scheduleRecovery(media, delay) {
+    if (recovering.has(media)) return;
+    recovering.add(media);
+    setTimeout(() => { recovering.delete(media); apply(media); }, delay);
+  }
   function apply(video) {
     if (!video.isConnected) return;
     // Bound retries when a player continually fights the selected rate.
     const now = performance.now();
     let state = attempts.get(video);
     if (!state || now - state.start > 1000) state = {start: now, count: 0};
-    if (state.count >= 2) return;
     if (video.playbackRate === speed && video.defaultPlaybackRate === speed && video.preservesPitch === true) return;
+    if (state.count >= 2) {
+      // Startup often resets the rate several times before play. Keep the work
+      // bounded, but do not discard the last correction: a paused player has
+      // no periodic recovery timer to repair it later.
+      scheduleRecovery(video, Math.max(1, 1001 - (now - state.start)));
+      return;
+    }
     state.count++;
     attempts.set(video, state);
     try {
@@ -84,8 +95,7 @@
       attached.add(media);
       media.addEventListener("ratechange", () => {
         if (media.playbackRate === speed || recovering.has(media)) return;
-        recovering.add(media);
-        setTimeout(() => { recovering.delete(media); apply(media); }, 500);
+        scheduleRecovery(media, 500);
       });
     }
     apply(media);
@@ -115,9 +125,12 @@
     for (const media of document.querySelectorAll("video,audio")) track(media);
   }
   function setSpeed(value) {
-    if (!allowed.includes(value) || value === speed) return;
+    if (!allowed.includes(value)) return;
     speed = value;
     for (const media of mediaElements) attempts.delete(media);
+    // Re-selecting the current app rate is an explicit request to restore it,
+    // including on paused players whose own controls changed their rate.
+    for (const media of mediaElements) apply(media);
     scan();
   }
   browser.runtime.onMessage.addListener(message => {

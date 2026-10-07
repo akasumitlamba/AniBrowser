@@ -72,6 +72,9 @@ test('bounds work when a player repeatedly resets its rate', async () => {
   for (let i = 0; i < 100; i++) first.fire('ratechange');
   await new Promise(resolve => setTimeout(resolve, 550));
   assert.ok(writes > 0 && writes <= 2, `unexpected ${writes} repeated writes`);
+  // Model the page going away so a deliberately hostile setter cannot keep
+  // the controller's deferred recovery alive beyond this test.
+  first.isConnected=false;
 });
 
 test('pitch preservation is restored even at the default playback rate', async () => {
@@ -102,4 +105,24 @@ test('paused and ended players stop recovery wakeups; resuming restarts one time
 });
 test('detached players release their recovery timer on the next tick',async()=>{
   const f=await fixture();f.first.isConnected=false;f.tick();assert.equal(f.timers().stops,1);
+});
+
+test('reselecting the app rate immediately restores a paused player after a site reset',async()=>{
+  const f=await fixture(2);
+  f.first.paused=true;f.event('pause',f.first);
+  f.first.playbackRate=1;f.first.defaultPlaybackRate=1;
+  f.update(2);
+  assert.equal(f.first.playbackRate,2);
+  assert.equal(f.first.defaultPlaybackRate,2);
+});
+
+test('startup rate-reset bursts eventually recover even when the player remains paused',async()=>{
+  const f=await fixture(2);
+  f.first.paused=true;
+  for(let i=0;i<5;i++){
+    f.first.playbackRate=1;f.event('loadedmetadata',f.first);
+  }
+  assert.equal(f.first.playbackRate,1);
+  await new Promise(resolve=>setTimeout(resolve,1100));
+  assert.equal(f.first.playbackRate,2);
 });

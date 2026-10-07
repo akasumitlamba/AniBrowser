@@ -69,6 +69,9 @@ open class BrowserApplication : Application() {
             return
         }
 
+        // FCM callbacks can arrive as soon as Application.onCreate returns.
+        // Register the processor before deferring optional network initialization.
+        components.push.feature?.let { PushProcessor.install(it) }
         components.core.engine.warmUp()
 
         restoreBrowserState()
@@ -129,7 +132,6 @@ open class BrowserApplication : Application() {
         components.push.feature?.let {
             Logger.info("AutoPushFeature is configured, initializing it...")
 
-            PushProcessor.install(it)
 
             // WebPush integration to observe and deliver push messages to engine.
             WebPushEngineIntegration(components.core.engine, it).start()

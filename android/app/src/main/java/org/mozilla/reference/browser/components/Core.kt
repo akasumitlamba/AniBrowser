@@ -30,7 +30,7 @@ import mozilla.components.feature.addons.migration.DefaultSupportedAddonsChecker
 import mozilla.components.feature.addons.update.DefaultAddonUpdater
 import mozilla.components.feature.customtabs.store.CustomTabsServiceStore
 import mozilla.components.feature.downloads.DownloadMiddleware
-import mozilla.components.feature.media.MediaSessionFeature
+import org.mozilla.reference.browser.media.ActiveMediaSessionFeature
 import mozilla.components.feature.media.middleware.RecordingDevicesMiddleware
 import mozilla.components.feature.prompts.file.FileUploadsDirCleaner
 import mozilla.components.feature.pwa.ManifestStorage
@@ -134,7 +134,7 @@ class Core(
                     notificationsDelegate = context.components.notificationsDelegate,
                 )
 
-                MediaSessionFeature(context, MediaSessionService::class.java, this).start()
+                ActiveMediaSessionFeature(context, this).start()
             }
     }
 

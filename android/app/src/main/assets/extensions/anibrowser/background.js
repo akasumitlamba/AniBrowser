@@ -64,13 +64,19 @@ browser.webRequest.onBeforeRequest.addListener(details => {
 }, {urls: ["http://*/*", "https://*/*"], types: ["main_frame"]}, ["blocking"]);
 const ready = browser.storage.local.get("speed").then(saved => {
   if (allowed.includes(saved.speed)) speed = saved.speed;
-});
+}).catch(() => {});
+let persistence = Promise.resolve();
 async function update(value) {
   await ready;
-  if (!allowed.includes(value) || value === speed) return;
+  if (!allowed.includes(value)) return;
+  const changed = value !== speed;
   speed = value;
-  await browser.storage.local.set({speed});
+  // Persist independently of delivery: a failed/slow write must not leave the
+  // displayed app rate out of sync with the current player. Queue writes so a
+  // burst of selections cannot restore an older rate on the next launch.
+  if (changed) persistence = persistence.then(() => browser.storage.local.set({speed:value})).catch(() => {});
   const tabs = await browser.tabs.query({});
+  // Omitting frameId intentionally broadcasts to every injected player frame.
   await Promise.all(tabs.map(tab => browser.tabs.sendMessage(tab.id, {speed}).catch(() => {})));
 }
 browser.runtime.onMessage.addListener(async (message, sender) => {

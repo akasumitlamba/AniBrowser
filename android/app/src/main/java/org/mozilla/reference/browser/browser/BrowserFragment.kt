@@ -74,6 +74,20 @@ class BrowserFragment : BaseBrowserFragment(), UserInteractionHandler {
         super.onViewCreated(view, savedInstanceState)
 
         bindLoadingScreen(view)
+        (view as? org.mozilla.reference.browser.ani.BrowserRootLayout)?.onVerticalPageSwipe = { down ->
+            val tab = requireComponents.core.store.state.tabs.firstOrNull {
+                it.id == (sessionId ?: requireComponents.core.store.state.selectedTabId)
+            }
+            val editing = toolbar.findFocus() is android.widget.EditText
+            val keyboard = androidx.core.view.ViewCompat.getRootWindowInsets(view)
+                ?.isVisible(androidx.core.view.WindowInsetsCompat.Type.ime()) == true
+            if (activity !is org.mozilla.reference.browser.ani.WebsiteActivity &&
+                tab?.content?.fullScreen != true && animeHubView?.visibility != View.VISIBLE && !editing && !keyboard) {
+                toolbar.visibility = if (down) View.GONE else View.VISIBLE
+                updateBrowserViewport()
+            }
+        }
+
         view.isFocusableInTouchMode = true
         (view as? org.mozilla.reference.browser.ani.BrowserRootLayout)?.dismissAddressEditor = {
             dismissAddressEditing().also { dismissed ->
@@ -282,6 +296,8 @@ class BrowserFragment : BaseBrowserFragment(), UserInteractionHandler {
                         val isHome = url.isNullOrBlank() || url == "about:home" || url == "about:blank"
                         animeHubView?.visibility = if (isHome) View.VISIBLE else View.GONE
                         if (isHome) {
+                            toolbar.visibility = View.VISIBLE
+                            updateBrowserViewport()
                             animeHubView?.loadContent()
                         } else {
                             animeHubView?.releaseContent(destroy = false)
