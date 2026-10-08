@@ -103,6 +103,7 @@ open class BrowserActivity : AppCompatActivity() {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        (application as BrowserApplication).startBrowser()
         setTheme(R.style.AppThemeNotActionBar)
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)

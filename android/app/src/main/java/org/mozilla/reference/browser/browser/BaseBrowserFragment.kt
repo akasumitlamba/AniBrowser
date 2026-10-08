@@ -18,6 +18,11 @@ import androidx.annotation.CallSuper
 import androidx.compose.ui.platform.ComposeView
 import androidx.coordinatorlayout.widget.CoordinatorLayout
 import androidx.fragment.app.Fragment
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.distinctUntilChanged
+import mozilla.components.lib.state.ext.flow
 import androidx.preference.PreferenceManager
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 import mozilla.components.browser.state.selector.findTabOrCustomTabOrSelectedTab
@@ -83,6 +88,7 @@ abstract class BaseBrowserFragment : Fragment(), UserInteractionHandler, Activit
     private val fullScreenMediaSessionFeature = ViewBoundFeatureWrapper<MediaSessionFullscreenFeature>()
     private val lastTabFeature = ViewBoundFeatureWrapper<LastTabFeature>()
     private val screenOrientationFeature = ViewBoundFeatureWrapper<ScreenOrientationFeature>()
+    private var crashedPageNotice: com.google.android.material.snackbar.Snackbar? = null
 
     private val engineView: EngineView
         get() = requireView().findViewById<View>(R.id.engineView) as EngineView
@@ -180,6 +186,23 @@ abstract class BaseBrowserFragment : Fragment(), UserInteractionHandler, Activit
         savedInstanceState: Bundle?,
     ) {
         val prefs = PreferenceManager.getDefaultSharedPreferences(requireContext())
+        viewLifecycleOwner.lifecycleScope.launch {
+            requireComponents.core.store.flow().map { state ->
+                state.findTabOrCustomTabOrSelectedTab(sessionId)?.takeIf { it.engineState.crashed }?.id
+            }.distinctUntilChanged().collect { crashedId ->
+                crashedPageNotice?.dismiss()
+                crashedPageNotice = null
+                if (crashedId != null) {
+                    fullScreenChanged(false)
+                    crashedPageNotice = com.google.android.material.snackbar.Snackbar.make(
+                        view, "This page stopped responding. Reload it to continue.",
+                        com.google.android.material.snackbar.Snackbar.LENGTH_INDEFINITE,
+                    ).setAction("Reload") {
+                        requireComponents.useCases.sessionUseCases.crashRecovery.invoke(listOf(crashedId))
+                    }.also { it.show() }
+                }
+            }
+        }
 
         sessionFeature.set(
             feature =
@@ -459,6 +482,12 @@ abstract class BaseBrowserFragment : Fragment(), UserInteractionHandler, Activit
             params.topMargin = resources.getDimensionPixelSize(R.dimen.browser_toolbar_height)
             swipeRefresh.layoutParams = params
         }
+    }
+
+    override fun onDestroyView() {
+        crashedPageNotice?.dismiss()
+        crashedPageNotice = null
+        super.onDestroyView()
     }
 
     private fun fullScreenChanged(enabled: Boolean) {

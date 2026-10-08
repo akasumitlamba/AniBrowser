@@ -20,6 +20,9 @@ import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.isActive
 
 /**
  * Retains a paused Home briefly for quick returns, then releases Chromium so
@@ -33,7 +36,15 @@ class AnimeHubView @JvmOverloads constructor(
     private var internalWebView: WebView? = null
     private var wallpaperScope = MainScope()
     private var wallpaperJob: Job? = null
+    private var contentJob: Job? = null
+    private val homeRetentionMillis by lazy {
+        val manager = context.getSystemService(Context.ACTIVITY_SERVICE) as android.app.ActivityManager
+        val memory = android.app.ActivityManager.MemoryInfo().also(manager::getMemoryInfo)
+        if (manager.isLowRamDevice || memory.totalMem <= 4L * 1024 * 1024 * 1024) 1000L else 30_000L
+    }
     private var contentDirty = false
+    private var contentLoading = false
+    private var rendererRecoveryPending = false
     private val releaseIdleHome = Runnable { if (visibility != VISIBLE) releaseContent(destroy = true) }
     @Suppress("DEPRECATION", "OVERRIDE_DEPRECATION") // Android 10 devices still deliver these memory signals.
     private val memoryCallbacks = object : android.content.ComponentCallbacks2 {
@@ -108,7 +119,33 @@ class AnimeHubView @JvmOverloads constructor(
             overScrollMode = OVER_SCROLL_NEVER
             addJavascriptInterface(AniHomeBridge(), "AniHomeBridge")
             webViewClient = object : WebViewClient() {
+                override fun onRenderProcessGone(view: WebView, detail: android.webkit.RenderProcessGoneDetail): Boolean {
+                    // Chromium terminates the host app unless every affected WebView
+                    // handles renderer loss and removes its dead instance.
+                    if (internalWebView === view) {
+                        internalWebView = null
+                        contentReady = false
+                        contentLoading = false
+                        contentDirty = true
+                        removeCallbacks(wallpaperCheck)
+                        wallpaperJob?.cancel()
+                        contentJob?.cancel()
+                    }
+                    removeView(view)
+                    view.destroy()
+                    if (!rendererRecoveryPending && isAttachedToWindow && visibility == VISIBLE) {
+                        rendererRecoveryPending = true
+                        postDelayed({
+                            rendererRecoveryPending = false
+                            if (isAttachedToWindow && visibility == VISIBLE) loadContent()
+                        }, 1000L)
+                    }
+                    return true
+                }
+
                 override fun onPageFinished(view: WebView?, url: String?) {
+                    if (view !== internalWebView) return
+                    contentLoading = false
                     contentReady = true
                     onContentReady?.invoke()
                     updateWallpaper()
@@ -154,8 +191,7 @@ class AnimeHubView @JvmOverloads constructor(
 
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
-        wallpaperScope.cancel()
-        wallpaperScope = MainScope()
+        if (!wallpaperScope.isActive) wallpaperScope = MainScope()
         context.applicationContext.registerComponentCallbacks(memoryCallbacks)
         AniHomeManager.onTilesChanged = { post {
             contentDirty = true
@@ -205,6 +241,8 @@ class AnimeHubView @JvmOverloads constructor(
         removeCallbacks(wallpaperCheck)
         postDelayed(wallpaperCheck, 8000L)
         val wv = internalWebView
+        // A second store emission while Home is starting must not restart its document.
+        if (!forceReload && !contentDirty && wv != null && contentLoading) return
         if (!forceReload && !contentDirty && wv != null && contentReady) {
             wv.onResume()
             wv.visibility = VISIBLE
@@ -214,9 +252,16 @@ class AnimeHubView @JvmOverloads constructor(
         contentReady = false
         contentDirty = false
         val view = ensureWebView()
+        contentLoading = true
         view.visibility = VISIBLE
         view.onResume()
-        view.loadDataWithBaseURL("https://$LOCAL_HOST/", AnimeHub.getHtml(context), "text/html", "UTF-8", null)
+        contentJob?.cancel()
+        contentJob = wallpaperScope.launch {
+            val html = withContext(Dispatchers.IO) { AnimeHub.getHtml(context.applicationContext) }
+            if (internalWebView === view) {
+                view.loadDataWithBaseURL("https://$LOCAL_HOST/", html, "text/html", "UTF-8", null)
+            }
+        }
     }
 
     fun releaseContent(destroy: Boolean = false) {
@@ -227,10 +272,13 @@ class AnimeHubView @JvmOverloads constructor(
             wallpaperJob = null
             internalWebView?.onPause()
             internalWebView?.visibility = GONE
-            postDelayed(releaseIdleHome, 30_000L)
+            postDelayed(releaseIdleHome, homeRetentionMillis)
             return
         }
         contentReady = false
+        contentLoading = false
+        contentJob?.cancel()
+        contentJob = null
         removeCallbacks(wallpaperCheck)
         wallpaperJob?.cancel()
         wallpaperJob = null

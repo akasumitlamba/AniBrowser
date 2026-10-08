@@ -139,6 +139,7 @@ class WebsiteActivity : BrowserActivity() {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        (application as org.mozilla.reference.browser.BrowserApplication).startBrowser()
         val id = intent.getStringExtra("shortcut_id").orEmpty()
         val url = getSharedPreferences("website_shortcuts", Context.MODE_PRIVATE).getString(id, null)
         if (url == null) { super.onCreate(savedInstanceState); finish(); return }

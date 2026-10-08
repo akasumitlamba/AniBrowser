@@ -23,6 +23,7 @@ class IntentReceiverActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.ani_loading_screen)
+        (application as BrowserApplication).startBrowser()
         val intent = intent?.let { Intent(it) } ?: Intent()
 
         // Explicitly remove the new task and clear task flags (Our browser activity is a single
@@ -34,18 +35,20 @@ class IntentReceiverActivity : Activity() {
         // do not want to propagate this flag from the launcher activity to the browser.
         intent.flags = intent.flags and Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS.inv()
 
-        // The launcher has no URL to classify. Avoid initializing all external
-        // intent processors and their dependencies for ordinary app startup.
-        if (intent.action == Intent.ACTION_MAIN && intent.data == null) {
-            intent.setClass(this, BrowserActivity::class.java)
-            startActivity(intent)
-            finish()
-            return
-        }
-
-        val utils = components.utils
-
         intentScope.launch {
+            // Restore the selected tab before BrowserActivity decides whether Home is needed.
+            (application as BrowserApplication).awaitBrowserRestore()
+            // The launcher has no URL to classify. Avoid initializing all external
+            // intent processors and their dependencies for ordinary app startup.
+            if (intent.action == Intent.ACTION_MAIN && intent.data == null) {
+                intent.setClass(this@IntentReceiverActivity, BrowserActivity::class.java)
+                startActivity(intent)
+                finish()
+                return@launch
+            }
+
+            val utils = components.utils
+
             val processor = utils.intentProcessors.firstOrNull { it.process(intent) }
 
             val className =

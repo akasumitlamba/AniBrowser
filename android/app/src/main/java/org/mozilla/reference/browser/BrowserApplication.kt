@@ -49,6 +49,8 @@ open class BrowserApplication : Application() {
         )
 
     val components by lazy { Components(this, applicationScope) }
+    private var browserStarted = false
+    private var browserRestoreJob: kotlinx.coroutines.Job? = null
 
     override fun onCreate() {
         super.onCreate()
@@ -72,9 +74,16 @@ open class BrowserApplication : Application() {
         // FCM callbacks can arrive as soon as Application.onCreate returns.
         // Register the processor before deferring optional network initialization.
         components.push.feature?.let { PushProcessor.install(it) }
+    }
+
+    /** Workers and push callbacks must not warm Gecko or restore tabs in the background. */
+    fun startBrowser() {
+        check(android.os.Looper.myLooper() == android.os.Looper.getMainLooper())
+        if (browserStarted) return
+        browserStarted = true
         components.core.engine.warmUp()
 
-        restoreBrowserState()
+        browserRestoreJob = restoreBrowserState()
 
         applicationScope.launch {
             // Give the first page the startup CPU/network budget. Optional
@@ -86,6 +95,10 @@ open class BrowserApplication : Application() {
             }
             initializeOptionalFeatures()
         }
+    }
+
+    suspend fun awaitBrowserRestore() {
+        browserRestoreJob?.join()
     }
 
     private fun initializeOptionalFeatures() {
@@ -170,6 +183,7 @@ open class BrowserApplication : Application() {
 
     override fun onTrimMemory(level: Int) {
         super.onTrimMemory(level)
+        if (!browserStarted) return
         runOnlyInMainProcess {
             components.core.store.dispatch(SystemAction.LowMemoryAction(level))
             components.core.icons.onTrimMemory(level)
