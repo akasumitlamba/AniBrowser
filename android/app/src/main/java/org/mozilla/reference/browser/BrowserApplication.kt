@@ -58,9 +58,6 @@ open class BrowserApplication : Application() {
 
         setupCrashReporting(this)
 
-        AppServicesInitializer.init(AppServicesConfig(components.analytics.crashReporter))
-        RustHttpConfig.setClient(lazy { components.core.client })
-
         Log.addSink(AndroidLogSink())
 
         if (!isMainProcess()) {
@@ -70,6 +67,11 @@ open class BrowserApplication : Application() {
             // situation where we create a GeckoRuntime from the Gecko child process.
             return
         }
+
+        // Gecko child processes do not use the app's Places, Sync or push services.
+        // Initializing their Rust libraries in every renderer adds startup and memory cost.
+        AppServicesInitializer.init(AppServicesConfig(components.analytics.crashReporter))
+        RustHttpConfig.setClient(lazy { components.core.client })
 
         // FCM callbacks can arrive as soon as Application.onCreate returns.
         // Register the processor before deferring optional network initialization.
@@ -196,7 +198,18 @@ open class BrowserApplication : Application() {
             val store = components.core.store
             val sessionStorage = components.core.sessionStorage
 
-            components.useCases.tabsUseCases.restore(sessionStorage)
+            val restored = kotlinx.coroutines.withContext(Dispatchers.IO) {
+                sessionStorage.restore()?.let { state ->
+                    state.copy(tabs = state.tabs.map(org.mozilla.reference.browser.ani.SessionRestore::repair))
+                }
+            }
+            if (restored != null) {
+                components.useCases.tabsUseCases.restore.invoke(
+                    restored,
+                    mozilla.components.browser.state.action.TabListAction.RestoreAction.RestoreLocation.BEGINNING,
+                )
+            }
+            store.dispatch(mozilla.components.browser.state.action.RestoreCompleteAction)
 
             // Now that we have restored our previous state (if there's one) let's setup auto saving the state while
             // the app is used.

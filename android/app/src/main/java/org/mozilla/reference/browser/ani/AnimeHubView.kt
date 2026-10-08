@@ -257,7 +257,8 @@ class AnimeHubView @JvmOverloads constructor(
         view.onResume()
         contentJob?.cancel()
         contentJob = wallpaperScope.launch {
-            val html = withContext(Dispatchers.IO) { AnimeHub.getHtml(context.applicationContext) }
+            val reducedEffects = homeRetentionMillis == 1000L
+            val html = withContext(Dispatchers.IO) { AnimeHub.getHtml(context.applicationContext, reducedEffects) }
             if (internalWebView === view) {
                 view.loadDataWithBaseURL("https://$LOCAL_HOST/", html, "text/html", "UTF-8", null)
             }

@@ -5,7 +5,7 @@ import android.content.Context
 
 /** Lightweight responsive launcher markup rendered by [AnimeHubView]. */
 object AnimeHub {
-    fun getHtml(context: Context): String {
+    fun getHtml(context: Context, reducedEffects: Boolean = false): String {
         val tiles = AniHomeManager.getTiles(context)
         return """<!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"><title>AniBrowser Home</title>
@@ -479,6 +479,7 @@ button:focus-visible,.tile:focus-visible { outline:3px solid #bce2ff; outline-of
 .row .remove:active { background:#e18b8b44; }
 .row-copy input { min-height:36px; }
 @media(max-width:580px) { .row { gap:7px; padding:8px; } .row-mark { width:30px;height:30px;padding:3px; } }
+${if (reducedEffects) "* { backdrop-filter:none!important; -webkit-backdrop-filter:none!important; } .brand img { filter:none; }" else ""}
 </style></head><body><div class="wallpaper"><div class="wallpaper-photo" style="background-image:url('${DailyWallpaper.file(context)?.let { "https://anibrowser.local/wallpaper/" + it.name }.orEmpty()}')"></div></div><div class="shell">
 <header class="topbar">
   <div class="brand">

@@ -361,9 +361,9 @@ class BrowserFragment : BaseBrowserFragment(), UserInteractionHandler {
                 if (key != nextKey) { key = nextKey; sawLoading = false }
                 if (state.loading) sawLoading = true
                 val home = state.url.isBlank() || state.url == "about:home" || state.url == "about:blank"
-                val shouldShow = home && animeHubView?.contentReady != true
+                val shouldShow = if (home) animeHubView?.contentReady != true else state.loading && !state.painted
 
-                label.setText(R.string.ani_opening_app)
+                if (home) label.setText(R.string.ani_opening_app) else label.text = "Loading page…"
                 progress.isIndeterminate = true
 
                 if (!shouldShow || activity?.isInPictureInPictureMode == true) {
