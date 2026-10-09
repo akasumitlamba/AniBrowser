@@ -1,0 +1,11 @@
+upstream/
+core/
+decoded/
+resources/
+downloads/
+compiled/
+tools/*.jar
+signing/
+qa-output/
+*.b64
+*.upstream.*

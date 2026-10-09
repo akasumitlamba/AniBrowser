@@ -1,0 +1,10 @@
+{
+  "antlr-runtime.jar": "ce3fc8ecb10f39e9a3cddcbb2ce350d272d9cd3d0b1e18e6fe73c3b9389c8734",
+  "antlr.jar": "5ac36c2acfb0a0f3d37dafe20b5b570f2643e2d000c648d44503c2738be643df",
+  "apktool.jar": "dbf930b076c6b9be08d57c449cacefc3bdd6b71ebd59b3066fc0e1f5b14f9423",
+  "dexlib2.jar": "5a5c8982d8bd7d6e3bb1a0713049e3c78b719ec32b20f6b619885cec30a0dd61",
+  "guava.jar": "686404f2d1d4d221911f96bd627ff60dac2226a5dfa6fb8ba517073eb97ec0ef",
+  "jcommander.jar": "156be736199c990321d9ff77090b199629cfc9865e2d6c13f7cd291bb1641817",
+  "smali-util.jar": "4f580a9cff3ebb83cb3fd20bec88e37e4f183796ca652732992611620282daea",
+  "smali.jar": "136c5c4653d6531bd7b6f10f35f8691cb96432e727d30b4d5579826ee01e9419"
+}
